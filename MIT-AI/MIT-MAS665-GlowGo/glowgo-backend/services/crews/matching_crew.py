@@ -245,10 +245,15 @@ class MatchingCrew:
             candidate_count = matching_result.get("candidate_count", 0)
 
             if candidate_count == 0:
+                # Generate intelligent fallback suggestions
+                fallback_suggestions = await self._generate_fallback_suggestions(preferences, user_location, max_distance)
+
                 return {
                     "ranked_options": [],
                     "total_options_found": 0,
-                    "search_summary": "No providers found. Try adjusting your budget or location."
+                    "search_summary": fallback_suggestions["message"],
+                    "suggestions": fallback_suggestions.get("suggestions", []),
+                    "alternative_matches": fallback_suggestions.get("alternative_matches", [])
                 }
 
             logger.info(f"MatchingAgent found {candidate_count} candidates")
@@ -275,10 +280,17 @@ class MatchingCrew:
             if available_count == 0:
                 logger.warning("No providers have availability")
 
+                # Generate intelligent fallback suggestions for availability
+                fallback_suggestions = await self._generate_availability_fallback(
+                    candidates, preferences, user_location
+                )
+
                 return {
                     "ranked_options": [],
                     "total_options_found": candidate_count,
-                    "search_summary": f"Found {candidate_count} providers, but none have availability. Try selecting flexible timing."
+                    "search_summary": fallback_suggestions["message"],
+                    "suggestions": fallback_suggestions.get("suggestions", []),
+                    "alternative_matches": fallback_suggestions.get("alternative_matches", [])
                 }
 
             logger.info(f"AvailabilityAgent found {available_count} available providers")
@@ -424,6 +436,245 @@ class MatchingCrew:
                 "response_to_user": "I encountered an error. Please try again.",
                 "next_question": None,
                 "extracted_preferences": current_preferences
+            }
+
+    async def _generate_fallback_suggestions(
+        self,
+        preferences: Dict[str, Any],
+        user_location: Optional[Dict[str, float]],
+        max_distance: float
+    ) -> Dict[str, Any]:
+        """
+        Generate intelligent suggestions when no matches are found
+
+        This method tries relaxing constraints one at a time to find what adjustments
+        would yield results.
+
+        Args:
+            preferences: Original user preferences
+            user_location: User's location
+            max_distance: Current search radius
+
+        Returns:
+            dict: {
+                "message": str (user-friendly explanation),
+                "suggestions": [str] (list of adjustment suggestions),
+                "alternative_matches": [dict] (providers that would match with adjustments)
+            }
+        """
+        try:
+            suggestions = []
+            alternative_matches = []
+
+            # Try relaxing budget constraint
+            if preferences.get("budget_max"):
+                relaxed_budget_prefs = preferences.copy()
+                budget_increase = preferences["budget_max"] * 0.3  # 30% increase
+                relaxed_budget_prefs["budget_max"] = preferences["budget_max"] + budget_increase
+
+                # Quick check without full matching flow
+                from services.tools.matching_tools import service_filter_tool, budget_filter_tool
+
+                service_results = service_filter_tool.execute({
+                    "service_type": preferences.get("service_type")
+                })
+
+                if service_results.get("count", 0) > 0:
+                    budget_results = budget_filter_tool.execute({
+                        "budget_max": relaxed_budget_prefs["budget_max"],
+                        "budget_min": relaxed_budget_prefs.get("budget_min"),
+                        "services": service_results.get("matching_services", [])
+                    })
+
+                    if budget_results.get("count", 0) > 0:
+                        cheapest = min(
+                            budget_results["affordable_services"],
+                            key=lambda x: x.get("base_price", float('inf'))
+                        )
+                        suggestions.append(
+                            f"If you raise your budget to ${cheapest['base_price']:.0f}, "
+                            f"{cheapest['merchant_name']} would be available"
+                        )
+                        alternative_matches.append({
+                            "provider_name": cheapest["merchant_name"],
+                            "price": cheapest["base_price"],
+                            "adjustment_needed": "budget",
+                            "new_budget": cheapest["base_price"]
+                        })
+
+            # Try relaxing time constraint
+            if preferences.get("preferred_date") or preferences.get("time_urgency"):
+                # Suggest flexible timing
+                relaxed_time_prefs = preferences.copy()
+                relaxed_time_prefs["time_urgency"] = "flexible"
+                relaxed_time_prefs.pop("preferred_date", None)
+                relaxed_time_prefs.pop("preferred_time", None)
+                relaxed_time_prefs.pop("time_constraint", None)
+
+                # Quick availability check
+                from services.tools.matching_tools import service_filter_tool
+                service_results = service_filter_tool.execute({
+                    "service_type": preferences.get("service_type")
+                })
+
+                if service_results.get("count", 0) > 0:
+                    # Check if budget filter passes with flexible timing
+                    from services.tools.matching_tools import budget_filter_tool
+                    budget_results = budget_filter_tool.execute({
+                        "budget_max": preferences.get("budget_max"),
+                        "budget_min": preferences.get("budget_min"),
+                        "services": service_results.get("matching_services", [])
+                    })
+
+                    if budget_results.get("count", 0) > 0:
+                        preferred_date_str = preferences.get("preferred_date", "your preferred time")
+                        suggestions.append(
+                            f"If you're flexible with timing (not strict about {preferred_date_str}), "
+                            f"{budget_results['count']} provider(s) would be available"
+                        )
+
+            # Try expanding location radius
+            if user_location and max_distance < 25:
+                expanded_distance = max_distance + 10
+                suggestions.append(
+                    f"If you expand your search radius to {expanded_distance} miles, "
+                    f"more providers might be available"
+                )
+
+            # Build user-friendly message
+            if suggestions:
+                message = (
+                    f"I couldn't find exact matches for your criteria. Here are some options:\n\n"
+                    + "\n".join(f"• {s}" for s in suggestions[:3])  # Top 3 suggestions
+                )
+
+                if not alternative_matches:
+                    message += "\n\nWould you like to adjust any of these criteria?"
+            else:
+                message = (
+                    "Unfortunately, I couldn't find any providers matching your criteria. "
+                    "This might be because:\n"
+                    "• The service type might not be available in your area\n"
+                    "• Your budget or timing constraints are very specific\n\n"
+                    "Would you like to try a different service or adjust your preferences?"
+                )
+
+            return {
+                "message": message,
+                "suggestions": suggestions,
+                "alternative_matches": alternative_matches
+            }
+
+        except Exception as e:
+            logger.error(f"Error generating fallback suggestions: {e}", exc_info=True)
+            return {
+                "message": "No providers found. Try adjusting your budget, timing, or location.",
+                "suggestions": [],
+                "alternative_matches": []
+            }
+
+    async def _generate_availability_fallback(
+        self,
+        candidates: List[Dict[str, Any]],
+        preferences: Dict[str, Any],
+        user_location: Optional[Dict[str, float]]
+    ) -> Dict[str, Any]:
+        """
+        Generate suggestions when providers are found but none have availability
+
+        Args:
+            candidates: List of matched providers (without availability)
+            preferences: User preferences
+            user_location: User's location
+
+        Returns:
+            dict: {
+                "message": str,
+                "suggestions": [str],
+                "alternative_matches": [dict]
+            }
+        """
+        try:
+            suggestions = []
+            alternative_matches = []
+
+            # Extract time preferences
+            preferred_date = preferences.get("preferred_date")
+            preferred_time = preferences.get("preferred_time")
+            time_constraint = preferences.get("time_constraint")
+
+            # Suggest alternative timing
+            if preferred_date:
+                from datetime import datetime, timedelta
+                target_date = datetime.fromisoformat(preferred_date)
+
+                # Suggest day before
+                day_before = (target_date - timedelta(days=1)).date().isoformat()
+                suggestions.append(
+                    f"Try the day before ({day_before}) for better availability"
+                )
+
+                # Suggest day after
+                day_after = (target_date + timedelta(days=1)).date().isoformat()
+                suggestions.append(
+                    f"Try the day after ({day_after}) for more options"
+                )
+
+            if time_constraint:
+                # Suggest removing time constraint
+                suggestions.append(
+                    f"Consider removing the '{time_constraint}' time constraint for more flexibility"
+                )
+
+            if preferred_time:
+                # Suggest different time of day
+                from datetime import datetime
+                time_obj = datetime.strptime(preferred_time, "%H:%M")
+                hour = time_obj.hour
+
+                if hour < 12:
+                    suggestions.append("Try afternoon or evening slots (after 12pm)")
+                else:
+                    suggestions.append("Try morning slots (before 12pm)")
+
+            # Suggest flexible timing
+            if not suggestions:
+                suggestions.append("Try 'flexible' timing to see all available slots")
+
+            # Show top candidates that would be available with adjustments
+            for candidate in candidates[:3]:
+                alternative_matches.append({
+                    "provider_name": candidate.get("merchant_name", "Provider"),
+                    "price": candidate.get("base_price"),
+                    "rating": candidate.get("merchant_rating"),
+                    "adjustment_needed": "timing",
+                    "message": f"{candidate.get('merchant_name')} has availability at other times"
+                })
+
+            # Build message
+            message = (
+                f"Found {len(candidates)} great providers, but none have availability for your exact timing.\n\n"
+                "Here are some suggestions:\n"
+                + "\n".join(f"• {s}" for s in suggestions[:3])
+            )
+
+            if alternative_matches:
+                message += "\n\nProviders with availability at other times:\n"
+                for match in alternative_matches:
+                    message += f"• {match['provider_name']} (${match['price']}, {match['rating']}⭐)\n"
+
+            return {
+                "message": message,
+                "suggestions": suggestions,
+                "alternative_matches": alternative_matches
+            }
+
+        except Exception as e:
+            logger.error(f"Error generating availability fallback: {e}", exc_info=True)
+            return {
+                "message": "No availability found. Try flexible timing or different dates.",
+                "suggestions": [],
+                "alternative_matches": []
             }
 
 

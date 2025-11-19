@@ -16,48 +16,56 @@ class CompletenessValidatorTool(BaseModel):
     def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate preference completeness
-        
+
         Args:
             inputs: {"preferences": dict}
-            
+
         Returns:
             {"is_complete": bool, "missing_fields": list, "score": float}
         """
         try:
             prefs = inputs.get("preferences", {})
-            
+
+            # Check for ANY form of time information (new flexible format)
+            has_time_info = bool(
+                prefs.get("time_urgency") or
+                prefs.get("preferred_date") or
+                prefs.get("preferred_time") or
+                prefs.get("time_constraint")
+            )
+
             # Required fields
             required_fields = {
                 "service_type": prefs.get("service_type"),
                 "budget": prefs.get("budget_min") or prefs.get("budget_max"),
-                "time_urgency": prefs.get("time_urgency")
+                "time_info": has_time_info  # Accept ANY form of time information
             }
-            
+
             # Optional field
             optional_fields = {
                 "artisan_preference": prefs.get("artisan_preference")
             }
-            
+
             # Find missing required fields
-            missing = [field for field, value in required_fields.items() if value is None]
-            
+            missing = [field for field, value in required_fields.items() if not value]  # Use truthiness for boolean
+
             # Calculate score (0-1)
             total_fields = len(required_fields) + len(optional_fields)
-            filled_required = sum(1 for v in required_fields.values() if v is not None)
+            filled_required = sum(1 for k, v in required_fields.items() if v)  # Use truthiness
             filled_optional = sum(1 for v in optional_fields.values() if v is not None)
             score = (filled_required + filled_optional) / total_fields
-            
+
             return {
                 "is_complete": len(missing) == 0,
                 "missing_fields": missing,
                 "score": round(score, 2)
             }
-            
+
         except Exception as e:
             print(f"CompletenessValidatorTool error: {e}")
             return {
                 "is_complete": False,
-                "missing_fields": ["service_type", "budget", "time_urgency"],
+                "missing_fields": ["service_type", "budget", "time_info"],
                 "score": 0.0
             }
 
@@ -147,10 +155,25 @@ class DataQualityScorerTool(BaseModel):
             prefs = inputs.get("preferences", {})
             score = 100
             issues = []
-            
+
+            # Check for ANY form of time information (new flexible format)
+            has_time_info = bool(
+                prefs.get("time_urgency") or
+                prefs.get("preferred_date") or
+                prefs.get("preferred_time") or
+                prefs.get("time_constraint")
+            )
+
             # Completeness (30 points max)
-            required_fields = ["service_type", "budget_max", "time_urgency"]
-            missing_required = [f for f in required_fields if not prefs.get(f)]
+            # Check for service_type, budget, and ANY form of time info
+            missing_required = []
+            if not prefs.get("service_type"):
+                missing_required.append("service_type")
+            if not (prefs.get("budget_max") or prefs.get("budget_min")):
+                missing_required.append("budget")
+            if not has_time_info:
+                missing_required.append("time_info")
+
             score -= len(missing_required) * 10
             if missing_required:
                 issues.append(f"Missing required fields: {', '.join(missing_required)}")
@@ -295,8 +318,8 @@ class ValidationReportTool(BaseModel):
                         recommendations.append("Please specify what service you're looking for")
                     elif field == "budget":
                         recommendations.append("Please provide your budget range")
-                    elif field == "time_urgency":
-                        recommendations.append("Please let us know when you need this")
+                    elif field == "time_urgency" or field == "time_info":
+                        recommendations.append("Please let us know when you need this (e.g., 'next thursday', 'tomorrow at 3pm', 'before friday')")
             
             if compliance.get("violations"):
                 recommendations.append("Please review and fix the validation errors")

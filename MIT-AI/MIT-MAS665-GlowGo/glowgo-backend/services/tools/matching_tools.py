@@ -308,9 +308,17 @@ class AvailabilityFilterTool(BaseModel):
         """
         Filter providers by availability
 
+        Enhanced to handle:
+        1. preferred_date (ISO format)
+        2. preferred_time (HH:MM format)
+        3. time_constraint ("before", "after", "by")
+        4. time_urgency (fallback: "ASAP", "today", "week", "flexible")
+
         Args:
             inputs: {
                 "preferred_date": str (optional),  # ISO format date
+                "preferred_time": str (optional),  # HH:MM format
+                "time_constraint": str (optional),  # "before", "after", "by"
                 "time_urgency": str,  # "ASAP", "today", "week", "flexible"
                 "providers": list,  # List of provider objects
                 "db_session": Session (optional)
@@ -323,6 +331,9 @@ class AvailabilityFilterTool(BaseModel):
             }
         """
         try:
+            preferred_date = inputs.get("preferred_date")
+            preferred_time = inputs.get("preferred_time")
+            time_constraint = inputs.get("time_constraint")
             time_urgency = inputs.get("time_urgency", "flexible").lower()
             providers = inputs.get("providers", [])
             db_session = inputs.get("db_session")
@@ -342,8 +353,31 @@ class AvailabilityFilterTool(BaseModel):
 
                 today = datetime.now().date()
 
-                # Determine date range based on urgency
-                if time_urgency in ["asap", "today"]:
+                # Determine date range based on preferences
+                # Priority: preferred_date > time_urgency
+
+                if preferred_date:
+                    # User specified a specific date
+                    target_date = datetime.fromisoformat(preferred_date).date()
+
+                    if time_constraint == "before":
+                        # "before [date]" means from today up to (but not including) that date
+                        start_date = today
+                        end_date = target_date - timedelta(days=1)
+                    elif time_constraint == "by":
+                        # "by [date]" means from today up to and including that date
+                        start_date = today
+                        end_date = target_date
+                    elif time_constraint == "after":
+                        # "after [date]" means from the day after onwards (next 7 days)
+                        start_date = target_date + timedelta(days=1)
+                        end_date = target_date + timedelta(days=8)
+                    else:
+                        # No constraint - just that specific date
+                        start_date = target_date
+                        end_date = target_date
+
+                elif time_urgency in ["asap", "today"]:
                     start_date = today
                     end_date = today
                 elif time_urgency == "week":

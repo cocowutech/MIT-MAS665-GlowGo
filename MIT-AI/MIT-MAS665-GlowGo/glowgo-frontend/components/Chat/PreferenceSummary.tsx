@@ -49,13 +49,52 @@ export default function PreferenceSummary({ preferences, readyToMatch }: Prefere
           </p>
         </div>
 
-        {/* Time Urgency */}
+        {/* Time Preferences */}
         <div>
           <p className="text-sm text-gray-500 mb-1">When</p>
-          <p className="text-gray-900 font-medium capitalize">
-            {preferences.time_urgency || (
-              <span className="text-gray-400 italic">Not specified</span>
-            )}
+          <p className="text-gray-900 font-medium">
+            {(() => {
+              // Display new time format (preferred_date, preferred_time, time_constraint)
+              if (preferences.preferred_date) {
+                const date = new Date(preferences.preferred_date)
+                const dateStr = date.toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric'
+                })
+
+                let timeDisplay = dateStr
+
+                // Add time if specified
+                if (preferences.preferred_time) {
+                  const [hours, minutes] = preferences.preferred_time.split(':')
+                  const hour = parseInt(hours)
+                  const ampm = hour >= 12 ? 'PM' : 'AM'
+                  const hour12 = hour % 12 || 12
+                  timeDisplay += ` at ${hour12}:${minutes} ${ampm}`
+                }
+
+                // Add constraint if specified
+                if (preferences.time_constraint) {
+                  if (preferences.time_constraint === 'before') {
+                    timeDisplay = `Before ${timeDisplay}`
+                  } else if (preferences.time_constraint === 'by') {
+                    timeDisplay = `By ${timeDisplay}`
+                  } else if (preferences.time_constraint === 'after') {
+                    timeDisplay = `After ${timeDisplay}`
+                  }
+                }
+
+                return timeDisplay
+              }
+
+              // Fallback to time_urgency if no preferred_date
+              if (preferences.time_urgency) {
+                return <span className="capitalize">{preferences.time_urgency}</span>
+              }
+
+              return <span className="text-gray-400 italic">Not specified</span>
+            })()}
           </p>
         </div>
 

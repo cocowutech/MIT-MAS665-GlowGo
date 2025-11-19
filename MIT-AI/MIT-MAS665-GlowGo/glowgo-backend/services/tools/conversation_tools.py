@@ -342,12 +342,21 @@ class PreferenceExtractorTool(BaseModel):
         """
         Extract specific date, time, and time constraints from text
 
+        Enhanced to support:
+        1. Date only: "next thursday", "tomorrow", "next week"
+        2. Date + time: "next thursday 3 pm", "tomorrow at 5:30pm"
+        3. Deadlines: "before next thursday", "by friday 5pm", "after monday"
+        4. Date ranges: "next weekend" (converts to constraint)
+        5. Relative dates: "this weekend", "next week", "end of week"
+
         Examples:
             "before next thursday" → date: 2025-11-27, time: None, constraint: before
             "before next thursday 3 pm" → date: 2025-11-27, time: 15:00, constraint: before
             "after 5pm tomorrow" → date: 2025-11-16, time: 17:00, constraint: after
             "next thursday" → date: 2025-11-27, time: None, constraint: None
             "monday at 2:30pm" → date: 2025-11-18, time: 14:30, constraint: None
+            "next weekend" → date: 2025-11-22 (Saturday), constraint: None
+            "by end of week" → date: 2025-11-21 (Friday), constraint: by
 
         Returns:
             {"preferred_date": str (ISO format), "preferred_time": str (24h format), "time_constraint": str}
@@ -374,6 +383,62 @@ class PreferenceExtractorTool(BaseModel):
             result["time_constraint"] = "by"
             print(f"[DateTimeExtractor] Found constraint: by")
 
+        # Convert word numbers to digits in time context
+        # Word to number mapping for hours (1-12 for am/pm)
+        time_word_to_num = {
+            'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5', 'six': '6',
+            'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10', 'eleven': '11', 'twelve': '12',
+            'thirteen': '13', 'fourteen': '14', 'fifteen': '15', 'sixteen': '16',
+            'seventeen': '17', 'eighteen': '18', 'nineteen': '19', 'twenty': '20',
+            'twenty-one': '21', 'twenty-two': '22', 'twenty-three': '23',
+            'twenty one': '21', 'twenty two': '22', 'twenty three': '23'
+        }
+
+        # Convert time words to numbers (e.g., "three pm" -> "3 pm", "ten thirty am" -> "10:30 am")
+        text_with_time_numbers = text_lower
+
+        # First, handle compound time expressions like "five thirty pm" -> "5:30 pm"
+        # Pattern: [hour word] [minute word] [am/pm]
+        minute_words = {
+            'thirty': '30', 'fifteen': '15', 'forty-five': '45', 'forty five': '45',
+            'oh five': '05', 'o five': '05', 'five': '05', 'ten': '10', 'twenty': '20',
+            'forty': '40', 'fifty': '50', 'zero': '00', 'hundred': '00'
+        }
+
+        # Look for patterns like "five thirty pm" or "ten fifteen am"
+        for hour_word, hour_num in time_word_to_num.items():
+            for minute_word, minute_num in minute_words.items():
+                # Pattern: "five thirty pm"
+                pattern = r'\b' + hour_word + r'\s+' + minute_word + r'\b(?=\s*(am|pm))'
+                replacement = hour_num + ':' + minute_num
+                text_with_time_numbers = re.sub(
+                    pattern,
+                    replacement,
+                    text_with_time_numbers,
+                    flags=re.IGNORECASE
+                )
+
+        # Then handle simple hour expressions like "three pm"
+        for word, num in time_word_to_num.items():
+            # Match whole words followed by am/pm or o'clock
+            # Pattern: "three pm" or "three o'clock"
+            text_with_time_numbers = re.sub(
+                r'\b' + word + r'\b(?=\s*(am|pm|o\'clock|oclock))',
+                num,
+                text_with_time_numbers,
+                flags=re.IGNORECASE
+            )
+
+        # Handle "o'clock" format (e.g., "three o'clock" -> "3:00")
+        text_with_time_numbers = re.sub(
+            r'(\d{1,2})\s*(?:o\'clock|oclock)',
+            r'\1:00',
+            text_with_time_numbers,
+            flags=re.IGNORECASE
+        )
+
+        print(f"[DateTimeExtractor] After time word conversion: '{text_with_time_numbers}'")
+
         # Extract specific time (e.g., "3 pm", "3pm", "15:00", "3:30pm")
         time_patterns = [
             r'(\d{1,2}):(\d{2})\s*(am|pm)',  # 3:30pm, 3:30 pm
@@ -382,7 +447,7 @@ class PreferenceExtractorTool(BaseModel):
         ]
 
         for pattern in time_patterns:
-            match = re.search(pattern, text_lower)
+            match = re.search(pattern, text_with_time_numbers)
             if match:
                 groups = match.groups()
 
@@ -395,6 +460,7 @@ class PreferenceExtractorTool(BaseModel):
                     elif groups[1] == 'am' and hour == 12:
                         hour = 0
                     result["preferred_time"] = f"{hour:02d}:{minute:02d}"
+                    print(f"[DateTimeExtractor] Found time: {result['preferred_time']}")
                     break
 
                 elif len(groups) == 3 and groups[2] in ['am', 'pm']:
@@ -406,6 +472,7 @@ class PreferenceExtractorTool(BaseModel):
                     elif groups[2] == 'am' and hour == 12:
                         hour = 0
                     result["preferred_time"] = f"{hour:02d}:{minute:02d}"
+                    print(f"[DateTimeExtractor] Found time: {result['preferred_time']}")
                     break
 
                 elif len(groups) == 2 and groups[0] and groups[1]:
@@ -414,6 +481,7 @@ class PreferenceExtractorTool(BaseModel):
                     minute = int(groups[1])
                     if 0 <= hour <= 23 and 0 <= minute <= 59:
                         result["preferred_time"] = f"{hour:02d}:{minute:02d}"
+                        print(f"[DateTimeExtractor] Found time: {result['preferred_time']}")
                         break
 
         # Extract specific date
@@ -428,11 +496,62 @@ class PreferenceExtractorTool(BaseModel):
         # Check for "today"
         if "today" in text_lower:
             result["preferred_date"] = now.date().isoformat()
+            print(f"[DateTimeExtractor] Found 'today': {result['preferred_date']}")
 
         # Check for "tomorrow"
         elif "tomorrow" in text_lower or "tmr" in text_lower:
             tomorrow = now + timedelta(days=1)
             result["preferred_date"] = tomorrow.date().isoformat()
+            print(f"[DateTimeExtractor] Found 'tomorrow': {result['preferred_date']}")
+
+        # Check for "weekend" or "next weekend"
+        elif "weekend" in text_lower:
+            # Weekend = Saturday and Sunday
+            # "next weekend" or "this weekend" - we'll use Saturday as the target
+            is_next = "next" in text_lower
+
+            # Current day is 0=Mon, 1=Tue, ..., 5=Sat, 6=Sun
+            # If today is Mon-Thu (0-4), "weekend" = this Saturday
+            # If today is Fri-Sun (5-6), "weekend" = this Saturday (if Fri) or today (if Sat/Sun)
+
+            if current_weekday <= 4:  # Mon-Fri
+                # This weekend's Saturday
+                days_until_saturday = 5 - current_weekday
+                if is_next and current_weekday <= 4:
+                    # "next weekend" when it's Mon-Fri means next week's Saturday
+                    days_until_saturday += 7
+            else:  # Sat-Sun
+                # Already the weekend
+                if current_weekday == 5:  # Saturday
+                    days_until_saturday = 0 if not is_next else 7
+                else:  # Sunday
+                    days_until_saturday = 6 if not is_next else 13  # 6 days to next Sat
+
+            weekend_date = now + timedelta(days=days_until_saturday)
+            result["preferred_date"] = weekend_date.date().isoformat()
+            print(f"[DateTimeExtractor] Found 'weekend': {result['preferred_date']} (Saturday)")
+
+        # Check for "end of week" or "end of the week"
+        elif "end of" in text_lower and "week" in text_lower:
+            # End of week = Friday
+            days_until_friday = (4 - current_weekday) % 7
+            if days_until_friday == 0 and now.hour >= 17:  # It's Friday evening
+                days_until_friday = 7  # Next Friday
+
+            friday_date = now + timedelta(days=days_until_friday)
+            result["preferred_date"] = friday_date.date().isoformat()
+            print(f"[DateTimeExtractor] Found 'end of week': {result['preferred_date']} (Friday)")
+
+        # Check for "next week" (without specific day)
+        elif "next week" in text_lower:
+            # Next week = start of next week (Monday)
+            days_until_next_monday = (7 - current_weekday) % 7
+            if days_until_next_monday == 0:  # Today is Monday
+                days_until_next_monday = 7
+
+            next_monday = now + timedelta(days=days_until_next_monday)
+            result["preferred_date"] = next_monday.date().isoformat()
+            print(f"[DateTimeExtractor] Found 'next week': {result['preferred_date']} (Monday)")
 
         # Check for specific day names
         else:
