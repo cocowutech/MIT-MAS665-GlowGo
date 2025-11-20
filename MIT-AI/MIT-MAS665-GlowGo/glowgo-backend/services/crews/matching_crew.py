@@ -171,6 +171,13 @@ class MatchingCrew:
                 "search_summary": str
             }
         """
+        # Add location to preferences if passed separately
+        # This ensures the matching agent can filter by city (Boston/Cambridge)
+        if location and not preferences.get("location"):
+            # Extract just the city name from "Boston, MA" or "Cambridge, MA"
+            city = location.split(",")[0].strip()
+            preferences["location"] = city
+
         # For now, we'll use a default location (can be enhanced with geocoding)
         # This simplified version doesn't require exact coordinates
         user_location = None  # Let the matching agent handle location-based filtering
@@ -343,7 +350,21 @@ class MatchingCrew:
                     "reviews": int(provider.get("review_count", 0)),
                     "available_times": formatted_times,
                     "why_recommended": provider.get("recommendation_reason", "Great match for your needs"),
-                    "relevance_score": round(provider.get("overall_score", 0) / 100, 2)  # Convert to 0-1 scale
+                    "relevance_score": round(provider.get("overall_score", 0) / 100, 2),  # Convert to 0-1 scale
+
+                    # Enhanced fields for real provider data
+                    "photo_url": provider.get("photo_url", ""),
+                    "photos": provider.get("photos", []),
+                    "address": provider.get("address", ""),
+                    "city": provider.get("city", ""),
+                    "state": provider.get("state", ""),
+                    "phone": provider.get("phone", ""),
+                    "price_range": provider.get("price_range", ""),
+                    "specialties": provider.get("specialties", []),
+                    "stylist_names": provider.get("stylist_names", []),
+                    "booking_url": provider.get("booking_url", ""),
+                    "bio": provider.get("bio", ""),
+                    "yelp_url": provider.get("yelp_url", "")
                 })
 
             search_summary = (

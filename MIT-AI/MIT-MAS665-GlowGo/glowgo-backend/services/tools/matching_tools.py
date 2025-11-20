@@ -26,6 +26,7 @@ class ServiceFilterTool(BaseModel):
         Args:
             inputs: {
                 "service_type": str,  # e.g., "haircut", "nails"
+                "location": str (optional),  # e.g., "Boston", "Cambridge"
                 "db_session": Session (optional, will create if not provided)
             }
 
@@ -37,6 +38,7 @@ class ServiceFilterTool(BaseModel):
         """
         try:
             service_type = inputs.get("service_type", "").lower()
+            location = inputs.get("location", "")
             db_session = inputs.get("db_session")
             close_session = False
 
@@ -68,10 +70,24 @@ class ServiceFilterTool(BaseModel):
                 keywords = service_keywords.get(service_type, [service_type])
 
                 # Build SQL query with ILIKE for case-insensitive matching
-                # Match against service_name
+                # Match against service_name - including enhanced fields
+
+                # Build location filter clause
+                location_clause = ""
+                if location:
+                    # Handle "Boston/Cambridge" (either location) or specific city
+                    if "/" in location:
+                        cities = [c.strip() for c in location.split("/")]
+                        location_clause = " AND (" + " OR ".join([f"LOWER(m.city) LIKE :city_{i}" for i in range(len(cities))]) + ")"
+                    else:
+                        location_clause = " AND LOWER(m.city) LIKE :city_0"
+
                 query = text("""
                     SELECT DISTINCT s.*, m.business_name, m.rating, m.is_verified,
-                           m.location_lat, m.location_lon, m.city, m.state
+                           m.location_lat, m.location_lon, m.city, m.state,
+                           m.phone, m.address, m.photo_url as merchant_photo,
+                           m.price_range, m.photos, m.specialties, m.stylist_names,
+                           m.booking_url, m.yelp_url, m.bio
                     FROM services s
                     JOIN merchants m ON s.merchant_id = m.id
                     WHERE s.is_active = true
@@ -79,6 +95,7 @@ class ServiceFilterTool(BaseModel):
                         """ + " OR ".join([f"LOWER(s.service_name) LIKE :keyword_{i}" for i in range(len(keywords))]) + """
                         OR """ + " OR ".join([f"LOWER(m.service_category) LIKE :cat_keyword_{i}" for i in range(len(keywords))]) + """
                     )
+                    """ + location_clause + """
                     ORDER BY m.rating DESC, s.base_price ASC
                 """)
 
@@ -88,10 +105,19 @@ class ServiceFilterTool(BaseModel):
                     params[f"keyword_{i}"] = f"%{keyword}%"
                     params[f"cat_keyword_{i}"] = f"%{keyword}%"
 
+                # Add location parameters
+                if location:
+                    if "/" in location:
+                        cities = [c.strip() for c in location.split("/")]
+                        for i, city in enumerate(cities):
+                            params[f"city_{i}"] = f"%{city.lower()}%"
+                    else:
+                        params["city_0"] = f"%{location.lower()}%"
+
                 result = db_session.execute(query, params)
                 rows = result.fetchall()
 
-                # Convert to dictionaries
+                # Convert to dictionaries with enhanced fields
                 matching_services = []
                 for row in rows:
                     service_dict = {
@@ -109,8 +135,19 @@ class ServiceFilterTool(BaseModel):
                         "is_verified": row[12],
                         "location_lat": float(row[13]) if row[13] else None,
                         "location_lon": float(row[14]) if row[14] else None,
-                        "city": row[15],
-                        "state": row[16]
+                        "city": row[15] if len(row) > 15 else "",
+                        "state": row[16] if len(row) > 16 else "",
+                        # Enhanced fields
+                        "phone": row[17] if len(row) > 17 else "",
+                        "address": row[18] if len(row) > 18 else "",
+                        "merchant_photo": row[19] if len(row) > 19 else "",
+                        "price_range": row[20] if len(row) > 20 else "",
+                        "photos": row[21] if len(row) > 21 else [],
+                        "specialties": row[22] if len(row) > 22 else [],
+                        "stylist_names": row[23] if len(row) > 23 else [],
+                        "booking_url": row[24] if len(row) > 24 else "",
+                        "yelp_url": row[25] if len(row) > 25 else "",
+                        "bio": row[26] if len(row) > 26 else ""
                     }
                     matching_services.append(service_dict)
 
@@ -498,12 +535,13 @@ class ProviderStatusCheckerTool(BaseModel):
                 invalid_providers = []
 
                 for provider_id in provider_ids:
-                    # Query merchant status
+                    # Query merchant status with enhanced fields
                     query = text("""
                         SELECT id, business_name, email, phone, location_lat, location_lon,
                                address, city, state, zip_code, service_category,
                                rating, total_reviews, is_verified, photo_url, bio,
-                               years_experience
+                               years_experience, yelp_id, price_range, photos, specialties,
+                               stylist_names, booking_url, yelp_url
                         FROM merchants
                         WHERE id = :provider_id
                     """)
@@ -542,7 +580,7 @@ class ProviderStatusCheckerTool(BaseModel):
                             "reasons": reasons
                         })
                     else:
-                        # Valid provider
+                        # Valid provider with enhanced fields
                         provider_dict = {
                             "id": str(row[0]),
                             "business_name": row[1],
@@ -560,7 +598,15 @@ class ProviderStatusCheckerTool(BaseModel):
                             "is_verified": is_verified,
                             "photo_url": row[14],
                             "bio": row[15],
-                            "years_experience": row[16]
+                            "years_experience": row[16],
+                            # Enhanced fields
+                            "yelp_id": row[17] if len(row) > 17 else None,
+                            "price_range": row[18] if len(row) > 18 else "",
+                            "photos": row[19] if len(row) > 19 else [],
+                            "specialties": row[20] if len(row) > 20 else [],
+                            "stylist_names": row[21] if len(row) > 21 else [],
+                            "booking_url": row[22] if len(row) > 22 else "",
+                            "yelp_url": row[23] if len(row) > 23 else ""
                         }
                         valid_providers.append(provider_dict)
 

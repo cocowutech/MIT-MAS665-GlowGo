@@ -62,6 +62,20 @@ class MerchantOption(BaseModel):
     why_recommended: str = Field(..., description="Explanation for ranking")
     relevance_score: float = Field(..., description="Overall match score (0-1)", ge=0, le=1)
 
+    # Enhanced fields for real provider data
+    photo_url: Optional[str] = Field(None, description="Primary photo URL")
+    photos: List[str] = Field(default_factory=list, description="Additional photo URLs")
+    address: Optional[str] = Field(None, description="Full street address")
+    city: Optional[str] = Field(None, description="City name")
+    state: Optional[str] = Field(None, description="State abbreviation")
+    phone: Optional[str] = Field(None, description="Business phone number")
+    price_range: Optional[str] = Field(None, description="Price range ($, $$, $$$, $$$$)")
+    specialties: List[str] = Field(default_factory=list, description="Specialties and expertise")
+    stylist_names: List[str] = Field(default_factory=list, description="Names of stylists")
+    booking_url: Optional[str] = Field(None, description="Direct booking URL")
+    bio: Optional[str] = Field(None, description="Business description")
+    yelp_url: Optional[str] = Field(None, description="Yelp business page URL")
+
     class Config:
         json_schema_extra = {
             "example": {

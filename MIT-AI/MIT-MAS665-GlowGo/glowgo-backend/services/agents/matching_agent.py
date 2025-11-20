@@ -102,14 +102,19 @@ class MatchingAgent:
                         "message": "Service type is required"
                     }
 
-                print(f"🔍 Step 1: Filtering by service type: {service_type}")
+                # Get location from preferences (Boston/Cambridge filtering)
+                location = preferences.get("location", "")
+
+                print(f"🔍 Step 1: Filtering by service type: {service_type}" + (f" in {location}" if location else ""))
                 service_result = service_filter_tool.execute({
                     "service_type": service_type,
+                    "location": location,
                     "db_session": db_session
                 })
 
                 matching_services = service_result.get("matching_services", [])
-                filters_applied.append(f"service_type: {service_type} ({len(matching_services)} found)")
+                location_note = f" in {location}" if location else ""
+                filters_applied.append(f"service_type: {service_type}{location_note} ({len(matching_services)} found)")
 
                 if not matching_services:
                     return {

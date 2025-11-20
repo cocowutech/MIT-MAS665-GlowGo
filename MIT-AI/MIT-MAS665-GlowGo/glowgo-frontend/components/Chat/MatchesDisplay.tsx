@@ -105,26 +105,48 @@ interface MatchCardProps {
 }
 
 function MatchCard({ match, index }: MatchCardProps) {
-  const [isHovered, setIsHovered] = useState(false)
+  const [imageError, setImageError] = useState(false)
+
+  // Get the best available photo
+  const photoUrl = match.photo_url || (match.photos && match.photos[0]) || null
 
   return (
     <div
       className="bg-white rounded-[20px] shadow-md border border-gray-100 overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 animate-slide-in"
       style={{ animationDelay: `${index * 100}ms` }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Rank Badge */}
+      {/* Rank Badge & Image */}
       <div className="relative">
         <div className="absolute top-3 left-3 z-10">
           <div className="w-10 h-10 bg-blush-500 rounded-full flex items-center justify-center shadow-md">
             <span className="text-white font-bold text-sm">#{match.rank}</span>
           </div>
         </div>
-        {/* Placeholder for merchant image */}
-        <div className="h-40 bg-gradient-to-br from-blush-100 to-blush-200 flex items-center justify-center">
-          <span className="text-5xl">✨</span>
-        </div>
+
+        {/* Price Range Badge */}
+        {match.price_range && (
+          <div className="absolute top-3 right-3 z-10">
+            <span className="px-2 py-1 bg-white/90 backdrop-blur-sm text-gray-700 rounded-full text-xs font-semibold shadow-sm">
+              {match.price_range}
+            </span>
+          </div>
+        )}
+
+        {/* Provider Image */}
+        {photoUrl && !imageError ? (
+          <div className="h-44 overflow-hidden">
+            <img
+              src={photoUrl}
+              alt={match.merchant_name}
+              className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+              onError={() => setImageError(true)}
+            />
+          </div>
+        ) : (
+          <div className="h-44 bg-gradient-to-br from-blush-100 to-blush-200 flex items-center justify-center">
+            <span className="text-5xl">✨</span>
+          </div>
+        )}
       </div>
 
       <div className="p-5">
@@ -133,9 +155,33 @@ function MatchCard({ match, index }: MatchCardProps) {
           {match.merchant_name}
         </h3>
 
+        {/* Location */}
+        {(match.city || match.address) && (
+          <p className="text-xs text-gray-500 mb-2 truncate">
+            📍 {match.city && match.state ? `${match.city}, ${match.state}` : match.address}
+          </p>
+        )}
+
         {/* Service Name */}
         {match.service_name && (
-          <p className="text-sm text-gray-600 mb-3">{match.service_name}</p>
+          <p className="text-sm text-gray-600 mb-2">{match.service_name}</p>
+        )}
+
+        {/* Specialties Tags */}
+        {match.specialties && match.specialties.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {match.specialties.slice(0, 2).map((specialty, idx) => (
+              <span
+                key={idx}
+                className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs"
+              >
+                {specialty}
+              </span>
+            ))}
+            {match.specialties.length > 2 && (
+              <span className="text-xs text-gray-400">+{match.specialties.length - 2}</span>
+            )}
+          </div>
         )}
 
         {/* Rating & Reviews */}
@@ -150,16 +196,27 @@ function MatchCard({ match, index }: MatchCardProps) {
         {/* Price & Distance */}
         <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
           <div>
-            <p className="text-xs text-gray-500">Price</p>
+            <p className="text-xs text-gray-500">Starting at</p>
             <p className="text-xl font-bold text-blush-600">${match.price}</p>
           </div>
           {match.distance !== undefined && (
             <div className="text-right">
               <p className="text-xs text-gray-500">Distance</p>
-              <p className="text-sm font-medium text-gray-700">{match.distance} mi</p>
+              <p className="text-sm font-medium text-gray-700">{match.distance.toFixed(1)} mi</p>
             </div>
           )}
         </div>
+
+        {/* Stylists */}
+        {match.stylist_names && match.stylist_names.length > 0 && (
+          <div className="mb-3">
+            <p className="text-xs text-gray-500 mb-1">Stylists:</p>
+            <p className="text-sm text-gray-700 truncate">
+              {match.stylist_names.slice(0, 3).join(', ')}
+              {match.stylist_names.length > 3 && ` +${match.stylist_names.length - 3} more`}
+            </p>
+          </div>
+        )}
 
         {/* Why Recommended */}
         <div className="mb-4">
@@ -195,18 +252,31 @@ function MatchCard({ match, index }: MatchCardProps) {
           size="sm"
           fullWidth
           onClick={() => {
-            // TODO: Implement booking flow
-            console.log('Book:', match.merchant_name)
+            if (match.booking_url) {
+              window.open(match.booking_url, '_blank')
+            } else {
+              console.log('Book:', match.merchant_name)
+            }
           }}
         >
-          Book Now
+          {match.booking_url ? 'Book Now' : 'View Details'}
         </Button>
 
-        {/* Relevance Score (for debugging) */}
-        <div className="mt-2 text-center">
+        {/* Relevance Score & Links */}
+        <div className="mt-2 flex items-center justify-between">
           <span className="text-xs text-gray-400">
             Match: {Math.round(match.relevance_score * 100)}%
           </span>
+          {match.yelp_url && (
+            <a
+              href={match.yelp_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blush-500 hover:text-blush-600"
+            >
+              View on Yelp
+            </a>
+          )}
         </div>
       </div>
     </div>

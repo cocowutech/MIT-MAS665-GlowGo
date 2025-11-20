@@ -120,7 +120,7 @@ class PreferenceExtractorTool(BaseModel):
 
         Returns:
             {"budget_min": float, "budget_max": float, "time_urgency": str, "artisan_preference": str,
-             "preferred_date": str, "preferred_time": str, "time_constraint": str}
+             "preferred_date": str, "preferred_time": str, "time_constraint": str, "location": str}
         """
         try:
             message = inputs.get("message", "")
@@ -137,7 +137,8 @@ class PreferenceExtractorTool(BaseModel):
                 "special_notes": current_prefs.get("special_notes"),
                 "preferred_date": current_prefs.get("preferred_date"),
                 "preferred_time": current_prefs.get("preferred_time"),
-                "time_constraint": current_prefs.get("time_constraint")
+                "time_constraint": current_prefs.get("time_constraint"),
+                "location": current_prefs.get("location")
             }
 
             # Extract budget
@@ -165,6 +166,11 @@ class PreferenceExtractorTool(BaseModel):
             artisan_pref = self._extract_artisan_preference(message)
             if artisan_pref:
                 result["artisan_preference"] = artisan_pref
+
+            # Extract location (Boston/Cambridge area)
+            location = self._extract_location(message)
+            if location:
+                result["location"] = location
 
             # Debug logging - show what was extracted
             extracted_items = {k: v for k, v in result.items() if v is not None}
@@ -595,22 +601,60 @@ class PreferenceExtractorTool(BaseModel):
         """Extract provider preferences"""
         text_lower = text.lower()
         preferences = []
-        
+
         # Gender
         if "female" in text_lower or "woman" in text_lower:
             preferences.append("female")
         if "male" in text_lower or "man" in text_lower and "female" not in text_lower:
             preferences.append("male")
-        
+
         # Experience
         if any(word in text_lower for word in ["experienced", "senior", "expert", "professional"]):
             preferences.append("experienced")
-        
+
         # Openness
         if any(word in text_lower for word in ["open", "anyone", "no preference", "any"]):
             return "open to anyone"
-        
+
         return " ".join(preferences) if preferences else None
+
+    def _extract_location(self, text: str) -> Optional[str]:
+        """Extract location preference (Boston/Cambridge area)"""
+        text_lower = text.lower()
+
+        # Boston area keywords
+        boston_keywords = [
+            "boston", "back bay", "south end", "north end", "beacon hill",
+            "downtown boston", "fenway", "allston", "brighton", "jamaica plain",
+            "roxbury", "dorchester", "southie", "south boston", "charlestown",
+            "brookline", "newton", "somerville"
+        ]
+
+        # Cambridge area keywords
+        cambridge_keywords = [
+            "cambridge", "harvard square", "central square", "kendall square",
+            "porter square", "davis square", "inman square", "mit"
+        ]
+
+        # Check for Cambridge first (more specific)
+        for keyword in cambridge_keywords:
+            if keyword in text_lower:
+                return "Cambridge"
+
+        # Check for Boston
+        for keyword in boston_keywords:
+            if keyword in text_lower:
+                return "Boston"
+
+        # Generic area references
+        if "mass" in text_lower or "massachusetts" in text_lower:
+            return "Boston"  # Default to Boston for generic MA references
+
+        # Check for "either" or "both" - user is flexible
+        if any(phrase in text_lower for phrase in ["either", "both", "anywhere", "any area", "doesn't matter"]):
+            return "Boston/Cambridge"
+
+        return None
 
 
 class ClarifyingQuestionGeneratorTool(BaseModel):
@@ -646,6 +690,7 @@ class ClarifyingQuestionGeneratorTool(BaseModel):
                 "service_type": "What service are you looking for?",
                 "budget": "What's your budget for this service?",
                 "time_info": "When do you need this?",  # Changed from time_urgency to time_info
+                "location": "Where would you like to get this done? (Boston or Cambridge)",
                 "artisan_preference": "Any preferences for the provider?"
             }
             
@@ -696,7 +741,9 @@ class ConversationContextManagerTool(BaseModel):
                 summary_parts.append(f"Budget: ${extracted['budget_max']}")
             if extracted.get("time_urgency"):
                 summary_parts.append(f"When: {extracted['time_urgency']}")
-            
+            if extracted.get("location"):
+                summary_parts.append(f"Location: {extracted['location']}")
+
             summary = " | ".join(summary_parts) if summary_parts else "No preferences yet"
             
             return {
@@ -786,13 +833,15 @@ class ReadinessDetectorTool(BaseModel):
             print(f"  preferred_date: {prefs.get('preferred_date')}")
             print(f"  preferred_time: {prefs.get('preferred_time')}")
             print(f"  time_constraint: {prefs.get('time_constraint')}")
+            print(f"  location: {prefs.get('location')}")
             print(f"  has_time_info: {has_time_info}")
 
             # Required fields
             required = {
                 "service_type": prefs.get("service_type"),
                 "budget": prefs.get("budget_min") or prefs.get("budget_max"),
-                "time_info": has_time_info  # Accept any form of time information
+                "time_info": has_time_info,  # Accept any form of time information
+                "location": prefs.get("location")  # Boston/Cambridge area
             }
 
             # Optional field
@@ -827,7 +876,7 @@ class ReadinessDetectorTool(BaseModel):
             print(f"ReadinessDetectorTool error: {e}")
             return {
                 "ready_to_match": False,
-                "missing_fields": ["service_type", "budget", "time_info"],
+                "missing_fields": ["service_type", "budget", "time_info", "location"],
                 "completeness": 0.0
             }
 

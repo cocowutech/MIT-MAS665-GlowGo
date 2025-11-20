@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     ELEVENLABS_API_KEY: str
     ELEVENLABS_VOICE_ID: str
 
+    # Data Collection APIs
+    YELP_API_KEY: str | None = None
+    BRIGHTDATA_API_KEY: str | None = None
+    BRIGHTDATA_ZONE: str = "residential"  # BrightData proxy zone
+
     class Config:
         env_file = ".env"
         case_sensitive = True

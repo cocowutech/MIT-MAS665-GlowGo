@@ -131,7 +131,8 @@ class ConversationAgent:
                 "special_notes": preference_result.get("special_notes") or current_preferences.get("special_notes"),
                 "preferred_date": preference_result.get("preferred_date") or current_preferences.get("preferred_date"),
                 "preferred_time": preference_result.get("preferred_time") or current_preferences.get("preferred_time"),
-                "time_constraint": preference_result.get("time_constraint") or current_preferences.get("time_constraint")
+                "time_constraint": preference_result.get("time_constraint") or current_preferences.get("time_constraint"),
+                "location": preference_result.get("location") or current_preferences.get("location")
             }
             print(f"[ConversationAgent] Merged extracted_preferences: {extracted_preferences}")
             
@@ -172,7 +173,7 @@ class ConversationAgent:
 
                 time_display = ', '.join(time_info_parts) if time_info_parts else 'not specified'
 
-                prompt = f"""You are GlowGo, a friendly AI assistant.
+                prompt = f"""You are GlowGo, a friendly AI assistant helping users find beauty services in Boston/Cambridge.
 
 CURRENT DATE/TIME: {current_date} at {current_time}
 
@@ -182,6 +183,7 @@ We extracted:
 - Service: {extracted_preferences.get('service_type') or 'not specified'}
 - Budget: ${extracted_preferences.get('budget_max') or 'not specified'}
 - When: {time_display}
+- Location: {extracted_preferences.get('location') or 'not specified'}
 
 We need to ask: {question_result.get('question')}
 

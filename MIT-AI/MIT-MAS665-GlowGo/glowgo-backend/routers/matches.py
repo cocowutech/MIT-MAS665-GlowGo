@@ -119,7 +119,20 @@ async def find_matching_merchants(
                     reviews=int(option.get("reviews", 0)),
                     available_times=option.get("available_times", []),
                     why_recommended=option.get("why_recommended", "Good match"),
-                    relevance_score=float(option.get("relevance_score", 0))
+                    relevance_score=float(option.get("relevance_score", 0)),
+                    # Enhanced fields
+                    photo_url=option.get("photo_url"),
+                    photos=option.get("photos", []),
+                    address=option.get("address"),
+                    city=option.get("city"),
+                    state=option.get("state"),
+                    phone=option.get("phone"),
+                    price_range=option.get("price_range"),
+                    specialties=option.get("specialties", []),
+                    stylist_names=option.get("stylist_names", []),
+                    booking_url=option.get("booking_url"),
+                    bio=option.get("bio"),
+                    yelp_url=option.get("yelp_url")
                 )
                 ranked_options.append(merchant_option)
             except (ValueError, TypeError) as e:
@@ -235,7 +248,20 @@ async def find_matching_merchants_public(
                     reviews=int(option.get("reviews", 0)),
                     available_times=option.get("available_times", []),
                     why_recommended=option.get("why_recommended", "Good match"),
-                    relevance_score=float(option.get("relevance_score", 0))
+                    relevance_score=float(option.get("relevance_score", 0)),
+                    # Enhanced fields
+                    photo_url=option.get("photo_url"),
+                    photos=option.get("photos", []),
+                    address=option.get("address"),
+                    city=option.get("city"),
+                    state=option.get("state"),
+                    phone=option.get("phone"),
+                    price_range=option.get("price_range"),
+                    specialties=option.get("specialties", []),
+                    stylist_names=option.get("stylist_names", []),
+                    booking_url=option.get("booking_url"),
+                    bio=option.get("bio"),
+                    yelp_url=option.get("yelp_url")
                 )
                 ranked_options.append(merchant_option)
             except (ValueError, TypeError) as e:

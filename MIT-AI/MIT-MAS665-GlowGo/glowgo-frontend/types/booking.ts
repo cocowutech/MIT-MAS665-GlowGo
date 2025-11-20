@@ -31,6 +31,20 @@ export type MerchantOption = {
   available_times: string[];
   why_recommended: string;
   relevance_score: number;
+
+  // Enhanced fields for real provider data
+  photo_url?: string;
+  photos?: string[];
+  address?: string;
+  city?: string;
+  state?: string;
+  phone?: string;
+  price_range?: string; // $, $$, $$$, $$$$
+  specialties?: string[];
+  stylist_names?: string[];
+  booking_url?: string;
+  bio?: string;
+  yelp_url?: string;
 };
 
 export type ChatResponse = {
