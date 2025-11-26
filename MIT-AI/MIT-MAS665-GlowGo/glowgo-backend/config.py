@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     # Data Collection APIs
     YELP_API_KEY: str | None = None
+    GOOGLE_PLACES_API_KEY: str | None = None
     BRIGHTDATA_API_KEY: str | None = None
     BRIGHTDATA_ZONE: str = "residential"  # BrightData proxy zone
 
