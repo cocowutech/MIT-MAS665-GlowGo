@@ -26,12 +26,17 @@ kill_backend() {
         kill $BACKEND_PID
         BACKEND_PID=''
     else
-        lsof -i :8000 | awk 'NR>1 {print $2}' | xargs kill -9
+        local pids=$(lsof -i :8000 | awk 'NR>1 {print $2}')
+        if [ -n "$pids" ]; then
+            echo "Killing backend processes: $pids"
+            kill -9 $pids
+        fi
     fi
 }
 
 # Function to start backend
 start_backend() {
+    kill_backend
     echo "Starting GlowGo Backend..."
     cd "$BACKEND_DIR"
     
@@ -59,12 +64,17 @@ kill_frontend() {
         kill $FRONTEND_PID
         FRONTEND_PID=''
     else
-        lsof -i :3000 | awk 'NR>1 {print $2}' | xargs kill -9
+        local pids=$(lsof -i :3000 | awk 'NR>1 {print $2}')
+        if [ -n "$pids" ]; then
+            echo "Killing frontend processes: $pids"
+            kill -9 $pids
+        fi
     fi
 }
 
 # Function to start frontend
 start_frontend() {
+    kill_frontend
     echo "Starting GlowGo Frontend..."
     cd "$FRONTEND_DIR"
     
