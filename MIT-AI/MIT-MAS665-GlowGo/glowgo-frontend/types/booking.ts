@@ -9,13 +9,16 @@ export type ChatMessage = {
 };
 
 export type ExtractedPreferences = {
-  service_type?: string;
-  budget_min?: number;
-  budget_max?: number;
-  time_urgency?: string;
-  location?: string;
-  artisan_preference?: string;
-  special_notes?: string;
+  service_type?: string | null;
+  budget_min?: number | null;
+  budget_max?: number | null;
+  time_urgency?: string | null;
+  location?: string | null;
+  artisan_preference?: string | null;
+  special_notes?: string | null;
+  preferred_date?: string | null;
+  preferred_time?: string | null;
+  time_constraint?: string | null;
 };
 
 export type MerchantOption = {
