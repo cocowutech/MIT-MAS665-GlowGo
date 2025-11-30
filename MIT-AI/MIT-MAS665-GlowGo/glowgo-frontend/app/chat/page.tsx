@@ -11,7 +11,6 @@ import ChatInput from '@/components/Chat/ChatInput'
 import PreferenceSummary from '@/components/Chat/PreferenceSummary'
 import MatchesDisplay from '@/components/Chat/MatchesDisplay'
 import MicrophoneStatus from '@/components/Chat/MicrophoneStatus'
-import CalendarWidget from '@/components/Chat/CalendarWidget'
 import { fetchMatchingResults } from '@/services/bookingApi'
 import { MerchantOption } from '@/types/booking'
 
@@ -184,11 +183,6 @@ export default function ChatPage() {
 
         {/* Preferences Sidebar (Desktop) */}
         <div className="hidden md:block w-80">
-          {/* Calendar Widget - Shows if connected */}
-          <div className="p-4 pb-0">
-            <CalendarWidget />
-          </div>
-          
           <PreferenceSummary
             preferences={preferences}
             readyToMatch={readyToMatch}

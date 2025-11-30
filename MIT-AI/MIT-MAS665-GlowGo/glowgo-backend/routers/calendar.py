@@ -84,3 +84,4 @@ async def get_calendar_events(
         # For now, return empty list but still marked as 'connected' conceptually unless token revoked
         return CalendarEventsResponse(events=[], connected=False) 
 
+

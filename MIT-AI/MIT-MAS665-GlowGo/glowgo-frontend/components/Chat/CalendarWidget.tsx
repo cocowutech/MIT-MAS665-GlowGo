@@ -24,6 +24,8 @@ export default function CalendarWidget() {
   const [connected, setConnected] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
   useEffect(() => {
     if (!isAuthenticated || !token) {
       setLoading(false)
@@ -32,7 +34,7 @@ export default function CalendarWidget() {
 
     const fetchCalendar = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/calendar/events', {
+        const response = await fetch(`${API_BASE}/api/calendar/events`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }

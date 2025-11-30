@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { Preference } from '@/types/chat'
 import Button from '@/components/Button'
+import CalendarWidget from './CalendarWidget'
 
 interface PreferenceSummaryProps {
   preferences: Preference
@@ -99,6 +100,11 @@ export default function PreferenceSummary({ preferences, readyToMatch }: Prefere
               return <span className="text-gray-400 italic">Not specified</span>
             })()}
           </p>
+        </div>
+
+        {/* Calendar Widget */}
+        <div className="-mx-2">
+           <CalendarWidget />
         </div>
 
         {/* Provider Preference */}

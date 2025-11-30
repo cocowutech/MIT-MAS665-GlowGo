@@ -11,7 +11,7 @@ from datetime import datetime
 
 class GoogleLoginRequest(BaseModel):
     """Request schema for Google OAuth login"""
-    id_token: str = Field(..., description="Google ID token from OAuth flow")
+    id_token: Optional[str] = Field(None, description="Google ID token from OAuth flow")
     access_token: Optional[str] = Field(None, description="Google Access Token for Calendar API")
 
 
