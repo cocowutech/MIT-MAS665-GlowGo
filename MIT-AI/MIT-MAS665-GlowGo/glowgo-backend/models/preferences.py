@@ -25,6 +25,7 @@ class PreferenceSession(Base):
     time_constraint = Column(String(10), nullable=True)  # before, after, by
     artisan_preference = Column(Text, nullable=True)
     special_notes = Column(Text, nullable=True)
+    location = Column(String(255), nullable=True)  # e.g., "MIT station, Cambridge, MA", "Times Square, New York, NY"
     
     # Conversation tracking
     conversation_history = Column(JSON, nullable=False, default=list)
@@ -52,6 +53,7 @@ class PreferenceSession(Base):
             "time_constraint": self.time_constraint,
             "artisan_preference": self.artisan_preference,
             "special_notes": self.special_notes,
+            "location": self.location,
             "conversation_history": self.conversation_history,
             "ready_to_match": self.ready_to_match,
             "created_at": self.created_at.isoformat() if self.created_at else None,

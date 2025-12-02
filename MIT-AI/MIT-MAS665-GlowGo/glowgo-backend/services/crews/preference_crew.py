@@ -34,7 +34,8 @@ class PreferenceCrew:
         self,
         user_message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        current_preferences: Optional[Dict[str, Any]] = None
+        current_preferences: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Orchestrate agents to gather and validate user preferences
@@ -43,6 +44,7 @@ class PreferenceCrew:
             user_message: User's current message
             conversation_history: List of previous messages in conversation
             current_preferences: Already extracted preferences from previous turns
+            user_id: User ID for calendar access and personalization
 
         Returns:
             dict: {
@@ -75,7 +77,8 @@ class PreferenceCrew:
             conversation_result = await self.conversation_agent.execute(
                 user_message=user_message,
                 conversation_history=conversation_history,
-                current_preferences=current_preferences
+                current_preferences=current_preferences,
+                user_id=user_id
             )
 
             # Extract conversation agent outputs
@@ -84,6 +87,7 @@ class PreferenceCrew:
             ready_to_match = conversation_result.get("ready_to_match", False)
             next_question = conversation_result.get("next_question")
             conversation_context = conversation_result.get("conversation_context", "")
+            found_providers = conversation_result.get("found_providers", [])
 
             logger.info(f"ConversationAgent result - ready_to_match: {ready_to_match}")
 
@@ -98,7 +102,8 @@ class PreferenceCrew:
                     "extracted_preferences": extracted_preferences,
                     "response_to_user": response_to_user,
                     "next_question": next_question,
-                    "conversation_context": conversation_context
+                    "conversation_context": conversation_context,
+                    "found_providers": []
                 }
 
             # ======================================================================
@@ -137,7 +142,8 @@ class PreferenceCrew:
                     "extracted_preferences": extracted_preferences,
                     "response_to_user": clarification_message,
                     "next_question": "clarification_needed",
-                    "conversation_context": conversation_context
+                    "conversation_context": conversation_context,
+                    "found_providers": found_providers
                 }
 
             # All validations passed - ready to match!
@@ -147,7 +153,8 @@ class PreferenceCrew:
                 "extracted_preferences": extracted_preferences,
                 "response_to_user": response_to_user,
                 "next_question": None,
-                "conversation_context": conversation_context
+                "conversation_context": conversation_context,
+                "found_providers": found_providers
             }
 
         except Exception as e:
@@ -162,7 +169,8 @@ class PreferenceCrew:
                 "extracted_preferences": current_preferences,
                 "response_to_user": "I'm having trouble processing that. Could you tell me what service you're looking for?",
                 "next_question": "service_type",
-                "conversation_context": ""
+                "conversation_context": "",
+                "found_providers": []
             }
 
     def _generate_clarification_message(

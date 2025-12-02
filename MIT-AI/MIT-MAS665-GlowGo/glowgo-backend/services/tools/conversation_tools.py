@@ -739,10 +739,63 @@ class PreferenceExtractorTool(BaseModel):
         return " ".join(preferences) if preferences else None
 
     def _extract_location(self, text: str) -> Optional[str]:
-        """Extract location preference (Boston/Cambridge area)"""
+        """
+        Extract location preference with state disambiguation.
+        Supports Boston/Cambridge (MA) and New York (NY) areas.
+        Also supports place-based locations (subway stations, landmarks, etc.)
+
+        Returns location with state suffix to avoid ambiguity (e.g., "Cambridge, MA" not "Cambridge").
+        For place-based: "MIT station, Cambridge, MA"
+        Returns "AMBIGUOUS:city_name" if location needs clarification.
+        """
         text_lower = text.lower()
 
-        # Boston area keywords
+        # Place-based keywords (landmarks, subway stations, etc.)
+        # These return specific place + city for more accurate search
+        place_keywords_ma = {
+            "mit station": ("MIT station", "Cambridge, MA"),
+            "mit subway": ("MIT station", "Cambridge, MA"),
+            "kendall station": ("Kendall/MIT station", "Cambridge, MA"),
+            "kendall square": ("Kendall Square", "Cambridge, MA"),
+            "harvard square": ("Harvard Square", "Cambridge, MA"),
+            "harvard station": ("Harvard station", "Cambridge, MA"),
+            "central square": ("Central Square", "Cambridge, MA"),
+            "porter square": ("Porter Square", "Cambridge, MA"),
+            "porter station": ("Porter station", "Cambridge, MA"),
+            "davis square": ("Davis Square", "Somerville, MA"),
+            "park street": ("Park Street station", "Boston, MA"),
+            "downtown crossing": ("Downtown Crossing", "Boston, MA"),
+            "south station": ("South Station", "Boston, MA"),
+            "north station": ("North Station", "Boston, MA"),
+            "back bay station": ("Back Bay station", "Boston, MA"),
+            "copley square": ("Copley Square", "Boston, MA"),
+            "copley station": ("Copley station", "Boston, MA"),
+            "prudential": ("Prudential Center", "Boston, MA"),
+            "fenway park": ("Fenway Park", "Boston, MA"),
+            "newbury street": ("Newbury Street", "Boston, MA"),
+        }
+
+        place_keywords_ny = {
+            "times square": ("Times Square", "New York, NY"),
+            "grand central": ("Grand Central", "New York, NY"),
+            "penn station": ("Penn Station", "New York, NY"),
+            "union square": ("Union Square", "New York, NY"),
+            "columbus circle": ("Columbus Circle", "New York, NY"),
+            "rockefeller": ("Rockefeller Center", "New York, NY"),
+            "central park": ("Central Park", "New York, NY"),
+            "brooklyn bridge": ("Brooklyn Bridge", "New York, NY"),
+            "world trade": ("World Trade Center", "New York, NY"),
+        }
+
+        # Check for specific places first (most specific match wins)
+        # Sort by keyword length (longest first) to match most specific
+        all_places = {**place_keywords_ma, **place_keywords_ny}
+        for keyword in sorted(all_places.keys(), key=len, reverse=True):
+            if keyword in text_lower:
+                place_name, city = all_places[keyword]
+                return f"{place_name}, {city}"
+
+        # Boston area keywords (Massachusetts)
         boston_keywords = [
             "boston", "back bay", "south end", "north end", "beacon hill",
             "downtown boston", "fenway", "allston", "brighton", "jamaica plain",
@@ -750,36 +803,179 @@ class PreferenceExtractorTool(BaseModel):
             "brookline", "newton", "somerville"
         ]
 
-        # Cambridge area keywords
-        cambridge_keywords = [
-            "cambridge", "harvard square", "central square", "kendall square",
-            "porter square", "davis square", "inman square", "mit"
+        # Cambridge area keywords (Massachusetts) - could be confused with UK
+        cambridge_ma_keywords = [
+            "harvard square", "central square", "kendall square",
+            "porter square", "davis square", "inman square", "mit",
+            "cambridge ma", "cambridge, ma", "cambridge massachusetts"
         ]
 
-        # Check for Cambridge first (more specific)
-        for keyword in cambridge_keywords:
-            if keyword in text_lower:
-                return "Cambridge"
+        # New York City area keywords
+        nyc_keywords = [
+            "new york", "nyc", "manhattan", "brooklyn", "queens", "bronx",
+            "staten island", "harlem", "soho", "tribeca", "chelsea",
+            "greenwich village", "east village", "west village", "midtown",
+            "upper east side", "upper west side", "lower east side",
+            "williamsburg", "bushwick", "astoria", "flushing", "dumbo",
+            "times square", "wall street", "flatiron", "noho", "nolita"
+        ]
 
-        # Check for Boston
-        for keyword in boston_keywords:
-            if keyword in text_lower:
-                return "Boston"
+        # Track what we found
+        found_boston = any(kw in text_lower for kw in boston_keywords)
+        found_cambridge = "cambridge" in text_lower
+        found_cambridge_ma = any(kw in text_lower for kw in cambridge_ma_keywords)
+        found_nyc = any(kw in text_lower for kw in nyc_keywords)
+        found_ma_context = any(kw in text_lower for kw in ["ma", "massachusetts", "mass"])
+        found_ny_context = any(kw in text_lower for kw in ["ny", "new york"])
+        found_uk_context = any(kw in text_lower for kw in ["uk", "england", "british"])
 
-        # Generic area references
-        if "mass" in text_lower or "massachusetts" in text_lower:
-            return "Boston"  # Default to Boston for generic MA references
+        # Handle multiple cities mentioned (e.g., "boston, cambridge" or "boston or new york")
+        locations = []
 
-        # Check for "either" or "both" - user is flexible
+        if found_boston or found_cambridge_ma or (found_cambridge and found_ma_context):
+            if found_boston:
+                locations.append("Boston, MA")
+            if found_cambridge_ma or (found_cambridge and (found_ma_context or found_boston)):
+                # Cambridge with MA context or mentioned alongside Boston
+                locations.append("Cambridge, MA")
+
+        if found_nyc:
+            locations.append("New York, NY")
+
+        # If user said both Boston area and NYC
+        if len(locations) > 1:
+            return "/".join(locations)  # e.g., "Boston, MA/New York, NY"
+
+        if len(locations) == 1:
+            return locations[0]
+
+        # Handle ambiguous "cambridge" without MA context
+        if found_cambridge and not found_cambridge_ma and not found_ma_context and not found_boston:
+            # Check for UK context
+            if found_uk_context:
+                return "AMBIGUOUS:cambridge_uk"  # Signal to ask for clarification
+            # No clear context - needs clarification
+            return "AMBIGUOUS:cambridge"
+
+        # Generic state references
+        if found_ma_context and not found_nyc:
+            return "Boston, MA"  # Default to Boston for generic MA references
+
+        if found_ny_context and not found_boston and not found_cambridge:
+            return "New York, NY"  # Default to NYC for generic NY references
+
+        # Check for "either" or "both" - user is flexible within current pilot cities
         if any(phrase in text_lower for phrase in ["either", "both", "anywhere", "any area", "doesn't matter"]):
-            return "Boston/Cambridge"
+            return "Boston, MA/Cambridge, MA"
 
         return None
 
 
+def detect_time_suggestion_acceptance(
+    user_message: str,
+    last_assistant_message: str = ""
+) -> Dict[str, Any]:
+    """
+    Detect if the user is accepting a time suggestion from the agent.
+
+    Returns:
+        {
+            "accepted": bool,
+            "suggested_date": str or None (ISO format),
+            "suggested_time": str or None (HH:MM format),
+            "day_before_event": str or None (event name if suggesting day before)
+        }
+    """
+    result = {
+        "accepted": False,
+        "suggested_date": None,
+        "suggested_time": None,
+        "day_before_event": None
+    }
+
+    user_lower = user_message.lower().strip()
+    assistant_lower = last_assistant_message.lower()
+
+    # Acceptance patterns
+    acceptance_patterns = [
+        "yes", "yeah", "yep", "sure", "ok", "okay", "sounds good",
+        "that works", "perfect", "great", "let's do it", "book it",
+        "i'll take it", "that's perfect", "works for me", "let's go",
+        "confirmed", "confirm", "accept", "agreed"
+    ]
+
+    # Check if user is accepting
+    is_accepting = any(pattern in user_lower for pattern in acceptance_patterns)
+
+    if not is_accepting:
+        return result
+
+    result["accepted"] = True
+
+    # Try to extract the suggested time from the assistant's last message
+    # Look for time patterns like "11:00 AM", "2:30 PM", etc.
+    import re
+
+    # Extract time from assistant message
+    time_match = re.search(r'(\d{1,2}):?(\d{2})?\s*(am|pm)', assistant_lower)
+    if time_match:
+        hour = int(time_match.group(1))
+        minute = int(time_match.group(2)) if time_match.group(2) else 0
+        ampm = time_match.group(3)
+
+        if ampm == 'pm' and hour != 12:
+            hour += 12
+        elif ampm == 'am' and hour == 12:
+            hour = 0
+
+        result["suggested_time"] = f"{hour:02d}:{minute:02d}"
+
+    # Extract date from assistant message
+    # Look for day names or "tomorrow", "day before"
+    from datetime import datetime, timedelta
+    now = datetime.now()
+
+    days_of_week = {
+        "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+        "friday": 4, "saturday": 5, "sunday": 6
+    }
+
+    for day_name, day_num in days_of_week.items():
+        if day_name in assistant_lower:
+            # Calculate the date for this day
+            current_weekday = now.weekday()
+            days_ahead = day_num - current_weekday
+            if days_ahead <= 0:
+                days_ahead += 7
+            target_date = now + timedelta(days=days_ahead)
+            result["suggested_date"] = target_date.strftime("%Y-%m-%d")
+            break
+
+    if "tomorrow" in assistant_lower:
+        result["suggested_date"] = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    if "today" in assistant_lower:
+        result["suggested_date"] = now.strftime("%Y-%m-%d")
+
+    # Check if this was a "day before" suggestion
+    if "day before" in assistant_lower or "before your" in assistant_lower:
+        # Try to extract the event name
+        event_patterns = [
+            r"before (?:your|the) ([^!.]+?)(?:\!|\.|\?|$)",
+            r"before ([^!.]+?) so you",
+        ]
+        for pattern in event_patterns:
+            match = re.search(pattern, assistant_lower)
+            if match:
+                result["day_before_event"] = match.group(1).strip()
+                break
+
+    return result
+
+
 class ClarifyingQuestionGeneratorTool(BaseModel):
     """Tool to generate clarifying questions based on missing information"""
-    
+
     name: str = "clarifying_question_generator"
     description: str = "Generates natural follow-up questions for missing preference fields"
     
@@ -810,7 +1006,8 @@ class ClarifyingQuestionGeneratorTool(BaseModel):
                 "service_type": "What service are you looking for?",
                 "budget": "What's your budget for this service?",
                 "time_info": "When do you need this?",  # Changed from time_urgency to time_info
-                "location": "Where would you like to get this done? (Boston or Cambridge)",
+                "location": "Where would you like to get this done? We're currently serving Boston, Cambridge (MA), and New York City.",
+                "location_ambiguous_cambridge": "Did you mean Cambridge, Massachusetts (near Boston) or somewhere else? We're currently serving the Boston/Cambridge area and NYC.",
                 "artisan_preference": "Any preferences for the provider?"
             }
             
@@ -912,6 +1109,104 @@ class DateTimeContextTool(BaseModel):
             "days_until_weekend": days_until_weekend,
             "is_weekend": now.weekday() >= 5
         }
+
+
+async def extract_location_with_llm(
+    text: str,
+    llm,
+    current_location: Optional[str] = None
+) -> Optional[str]:
+    """
+    Use LLM to dynamically extract any place-based location in Boston/Cambridge (MA) or NYC.
+
+    Supports any place like:
+    - Subway stations: "MIT subway station", "Grand Central"
+    - Landmarks: "near the Public Library", "close to Central Park"
+    - Streets: "on Newbury Street", "near Times Square"
+    - Neighborhoods: "in Beacon Hill", "around SoHo"
+    - Addresses: "53 Wheeler St"
+
+    Returns a location string with city and state, e.g., "MIT station, Cambridge, MA"
+    Returns "AMBIGUOUS:cambridge" if clarification is needed.
+    Returns None if no location mentioned.
+    """
+    text_lower = text.lower()
+
+    # Quick check if any location-related words are present
+    location_signals = [
+        "in ", "near ", "around ", "close to ", "at ", "on ",
+        "boston", "cambridge", "new york", "nyc", "manhattan", "brooklyn",
+        "station", "square", "street", "st ", "avenue", "ave ", "park",
+        "subway", "metro", "landmark", "neighborhood", "area"
+    ]
+
+    has_location_signal = any(signal in text_lower for signal in location_signals)
+
+    if not has_location_signal:
+        return current_location  # Keep existing location
+
+    # Check for UK context to avoid confusion
+    uk_context = any(kw in text_lower for kw in ["uk", "england", "british"])
+
+    prompt = f"""Extract the location from this message for a beauty service search.
+
+Message: "{text}"
+Current location (if any): {current_location or "none"}
+
+CRITICAL RULES:
+1. ONLY extract a location if the user EXPLICITLY mentions a place, city, neighborhood, street, or landmark.
+2. DO NOT assume or default to any city. If no location is mentioned, return "NONE".
+3. DO NOT infer location from context or guess. The user must say it.
+4. We ONLY serve Boston/Cambridge (Massachusetts) and New York City areas.
+5. If a location IS mentioned, append the correct state: ", MA" for Massachusetts or ", NY" for New York.
+6. If user says just "Cambridge" without state context, return "AMBIGUOUS:cambridge" (could be UK or MA).
+7. If location is outside our service area (e.g., "Los Angeles"), return "UNSUPPORTED:location_name".
+
+Examples:
+- "I want a massage" → "NONE" (no location mentioned)
+- "before next friday" → "NONE" (no location mentioned)
+- "$50 budget" → "NONE" (no location mentioned)
+- "near MIT subway station" → "MIT station, Cambridge, MA"
+- "around Times Square" → "Times Square, New York, NY"
+- "in Boston" → "Boston, MA"
+- "on Newbury Street" → "Newbury Street, Boston, MA"
+- "I'm in cambridge" → "AMBIGUOUS:cambridge"
+- "in cambridge ma" or "cambridge massachusetts" → "Cambridge, MA"
+- "near the boston public library" → "Boston Public Library, Boston, MA"
+- "53 Wheeler St Cambridge" → "53 Wheeler St, Cambridge, MA"
+
+Return ONLY the location string, nothing else. Return "NONE" if no location is explicitly stated."""
+
+    try:
+        response = await llm.ainvoke(prompt)
+        result = response.content.strip().strip('"').strip("'")
+
+        # Handle special cases
+        if result == "NONE" or not result:
+            return current_location
+
+        if result.startswith("UNSUPPORTED:"):
+            print(f"[LocationExtractor] Unsupported location: {result}")
+            return None  # Will trigger location clarification question
+
+        if result.startswith("AMBIGUOUS:"):
+            return result  # Pass through for clarification handling
+
+        # Ensure state is appended
+        if result and "MA" not in result and "NY" not in result:
+            # Default to MA if unclear
+            if "new york" in result.lower() or "nyc" in result.lower() or "brooklyn" in result.lower() or "manhattan" in result.lower():
+                result = f"{result}, NY"
+            else:
+                result = f"{result}, MA"
+
+        print(f"[LocationExtractor] LLM extracted location: {result}")
+        return result
+
+    except Exception as e:
+        print(f"[LocationExtractor] LLM error: {e}")
+        # Fall back to rule-based extraction
+        return None
 
 
 class ReadinessDetectorTool(BaseModel):

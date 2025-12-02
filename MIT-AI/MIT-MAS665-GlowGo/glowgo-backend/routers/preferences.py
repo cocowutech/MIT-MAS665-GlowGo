@@ -103,7 +103,8 @@ async def chat_preferences(
             "preferred_time": session.preferred_time,
             "time_constraint": session.time_constraint,
             "artisan_preference": session.artisan_preference,
-            "special_notes": session.special_notes
+            "special_notes": session.special_notes,
+            "location": session.location
         }
         
         # Step 3: Add user message to history
@@ -118,7 +119,8 @@ async def chat_preferences(
         crew_result = await crew.run(
             user_message=request.message,
             conversation_history=conversation_history[:-1],  # Exclude current message
-            current_preferences=current_preferences
+            current_preferences=current_preferences,
+            user_id=str(current_user.id)  # Pass user ID for calendar access
         )
         
         # Step 5: Extract results from crew
@@ -126,6 +128,7 @@ async def chat_preferences(
         ai_response = crew_result["response_to_user"]
         ready_to_match = crew_result["ready_to_match"]
         next_question = crew_result.get("next_question")
+        found_providers = crew_result.get("found_providers", [])
 
         # Initialize matching results as None
         ranked_matches = None
@@ -170,9 +173,43 @@ async def chat_preferences(
 
                     # Update AI response to include match results
                     # REFACTOR: The ConversationAgent already provides a detailed list of options.
-                    # We ONLY update the response if NO matches were found, to inform the user.
-                    
-                    if not ranked_matches:
+                    # We ONLY update the response if NO matches were found AND the ConversationAgent
+                    # didn't already find results (check for star rating pattern in response).
+
+                    # Don't show "no matches" if ConversationAgent already found and displayed results
+                    conversation_has_results = "★" in ai_response or "options" in ai_response.lower()
+
+                    # If MatchingCrew found nothing but ConversationAgent found providers, use those
+                    if not ranked_matches and found_providers:
+                        logger.info(f"Using {len(found_providers)} providers from ConversationAgent")
+                        ranked_matches = []
+                        for i, provider in enumerate(found_providers[:3]):  # Limit to top 3
+                            ranked_matches.append({
+                                "merchant_id": provider.get("yelp_id") or provider.get("business_name", "").replace(" ", "_"),
+                                "merchant_name": provider.get("business_name", "Unknown"),
+                                "photo_url": provider.get("image_url") or (provider.get("photos", [None])[0] if provider.get("photos") else None),
+                                "photos": provider.get("photos", []),
+                                "address": provider.get("address", ""),
+                                "city": provider.get("city", ""),
+                                "state": provider.get("state", ""),
+                                "phone": provider.get("phone", ""),
+                                "price_range": provider.get("price", "$$"),
+                                "specialties": provider.get("categories", []),
+                                "stylist_names": [],
+                                "rating": float(provider.get("rating", 4.0)),
+                                "reviews": int(provider.get("review_count", 0)),
+                                "distance": provider.get("distance"),
+                                "why_recommended": f"Highly rated {provider.get('rating', 4.0)}★ with {provider.get('review_count', 0)} reviews",
+                                "relevance_score": 0.9 - (i * 0.05),  # Decreasing relevance
+                                "yelp_url": provider.get("yelp_url", ""),
+                                "booking_url": provider.get("booking_url") or provider.get("yelp_url", ""),
+                                "rank": i + 1,
+                                "service_name": updated_preferences.get("service_type", "Service"),
+                                "price": provider.get("price_estimate", 50)
+                            })
+                        total_matches_found = len(ranked_matches)
+
+                    if not ranked_matches and not conversation_has_results:
                         ai_response = (
                             f"{ai_response}\n\n"
                             f"I searched for matches but couldn't find any providers at the moment. "
@@ -217,7 +254,9 @@ async def chat_preferences(
             session.artisan_preference = updated_preferences["artisan_preference"]
         if updated_preferences.get("special_notes") is not None:
             session.special_notes = updated_preferences["special_notes"]
-        
+        if updated_preferences.get("location") is not None:
+            session.location = updated_preferences["location"]
+
         # Update ready_to_match status
         session.ready_to_match = ready_to_match
         
@@ -249,7 +288,8 @@ async def chat_preferences(
                 preferred_time=session.preferred_time,
                 time_constraint=session.time_constraint,
                 artisan_preference=session.artisan_preference,
-                special_notes=session.special_notes
+                special_notes=session.special_notes,
+                location=session.location
             ),
             response=ai_response,
             ready_to_match=ready_to_match,

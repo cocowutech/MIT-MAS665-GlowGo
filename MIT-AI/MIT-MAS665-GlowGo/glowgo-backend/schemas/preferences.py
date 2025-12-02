@@ -20,6 +20,7 @@ class PreferenceSchema(BaseModel):
     time_constraint: Optional[str] = None  # before, after, by
     artisan_preference: Optional[str] = None
     special_notes: Optional[str] = None
+    location: Optional[str] = None  # e.g., "Boston, MA", "New York, NY"
 
 
 class ChatResponse(BaseModel):
@@ -56,6 +57,7 @@ class PreferenceSessionResponse(BaseModel):
     time_constraint: Optional[str]
     artisan_preference: Optional[str]
     special_notes: Optional[str]
+    location: Optional[str]
     conversation_history: List[Dict[str, Any]]
     ready_to_match: bool
     created_at: datetime
