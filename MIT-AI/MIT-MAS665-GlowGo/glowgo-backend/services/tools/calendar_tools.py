@@ -705,8 +705,8 @@ def _build_smart_suggestion(
         suggested_time = important.get("suggested_time", "11:00 AM")
 
         suggestion_parts.append(
-            f"\n\n💡 I noticed you have **{important['event_name']}** on **{important['event_date']}**! "
-            f"How about getting your {service_type} done the day before on **{important['suggested_day']} around {suggested_time}**? "
+            f"\n\n💡 I noticed you have {important['event_name']} on {important['event_date']}! "
+            f"How about getting your {service_type} done the day before on {important['suggested_day']} around {suggested_time}? "
             f"That way you'll look fresh and have plenty of time to get ready for your big event!"
         )
 

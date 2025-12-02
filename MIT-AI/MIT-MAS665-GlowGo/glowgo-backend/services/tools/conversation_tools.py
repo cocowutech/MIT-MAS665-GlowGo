@@ -11,17 +11,18 @@ from pydantic import BaseModel, Field
 
 # Convert word numbers to digits in time context
 # Word to number mapping for hours (1-12 for am/pm)
-time_word_to_num = {
+# Base word to number mappings (hyphenated versions)
+_base_word_to_num = {
     'zero': '0',
     'one': '1',
     'two': '2',
-    'three': '3', 
-    'four': '4', 
-    'five': '5', 
+    'three': '3',
+    'four': '4',
+    'five': '5',
     'six': '6',
-    'seven': '7', 
-    'eight': '8', 
-    'nine': '9', 
+    'seven': '7',
+    'eight': '8',
+    'nine': '9',
     'ten': '10',
     'eleven': '11',
     'twelve': '12',
@@ -116,6 +117,13 @@ time_word_to_num = {
     'thousand': '1000',
 }
 
+# Add space versions for compound numbers (speech-to-text often outputs "forty five" not "forty-five")
+time_word_to_num = {**_base_word_to_num}
+for word, num in list(_base_word_to_num.items()):
+    if '-' in word:
+        # Add space version: "forty-five" -> "forty five"
+        time_word_to_num[word.replace('-', ' ')] = num
+
 
 # First, handle compound time expressions like "five thirty pm" -> "5:30 pm"
 # Pattern: [hour word] [minute word] [am/pm]
@@ -133,6 +141,18 @@ minute_words = {
 }
 
 numbers_dicts = { **minute_words, **time_word_to_num}
+
+# Ordinal words to numbers (for date parsing like "December the third")
+ordinal_word_to_num = {
+    'first': '1', 'second': '2', 'third': '3', 'fourth': '4', 'fifth': '5',
+    'sixth': '6', 'seventh': '7', 'eighth': '8', 'ninth': '9', 'tenth': '10',
+    'eleventh': '11', 'twelfth': '12', 'thirteenth': '13', 'fourteenth': '14',
+    'fifteenth': '15', 'sixteenth': '16', 'seventeenth': '17', 'eighteenth': '18',
+    'nineteenth': '19', 'twentieth': '20', 'twenty-first': '21', 'twenty-second': '22',
+    'twenty-third': '23', 'twenty-fourth': '24', 'twenty-fifth': '25',
+    'twenty-sixth': '26', 'twenty-seventh': '27', 'twenty-eighth': '28',
+    'twenty-ninth': '29', 'thirtieth': '30', 'thirty-first': '31'
+}
 
 
 class IntentParserTool(BaseModel):
@@ -315,8 +335,10 @@ class PreferenceExtractorTool(BaseModel):
         # This prevents extracting time numbers like "3 pm"
 
         # Convert word numbers to digits in the text
+        # IMPORTANT: Sort by length (longest first) so "forty five" is matched before "five"
         text_converted = text
-        for word, num in numbers_dicts.items():
+        sorted_words = sorted(numbers_dicts.items(), key=lambda x: len(x[0]), reverse=True)
+        for word, num in sorted_words:
             # Match whole words only with word boundaries
             pattern = r"\b" + word + r"\b"
             text_converted = re.sub(pattern, num, text_converted, flags=re.IGNORECASE)
@@ -525,8 +547,22 @@ class PreferenceExtractorTool(BaseModel):
             result["time_constraint"] = "by"
             print(f"[DateTimeExtractor] Found constraint: by")
 
+        # Convert ordinal words to numbers for dates (e.g., "the third" -> "the 3")
+        # This handles "December the third" -> "December the 3"
+        text_with_ordinals = text_lower
+        for ordinal_word, ordinal_num in ordinal_word_to_num.items():
+            # Match ordinal words (with optional "the" before)
+            text_with_ordinals = re.sub(
+                r'\b(?:the\s+)?' + ordinal_word + r'\b',
+                ordinal_num,
+                text_with_ordinals,
+                flags=re.IGNORECASE
+            )
+
+        print(f"[DateTimeExtractor] After ordinal conversion: '{text_with_ordinals}'")
+
         # Convert time words to numbers (e.g., "three pm" -> "3 pm", "ten thirty am" -> "10:30 am")
-        text_with_time_numbers = text_lower
+        text_with_time_numbers = text_with_ordinals
 
         # Look for patterns like "five thirty pm" or "ten fifteen am"
         for hour_word, hour_num in time_word_to_num.items():
@@ -679,8 +715,39 @@ class PreferenceExtractorTool(BaseModel):
             result["preferred_date"] = next_monday.date().isoformat()
             print(f"[DateTimeExtractor] Found 'next week': {result['preferred_date']} (Monday)")
 
-        # Check for specific day names
-        else:
+        # Check for explicit month+day patterns (e.g., "December 3rd", "Dec 3", "January 15th")
+        # IMPORTANT: Use text_with_ordinals (where "third" → "3") not text_lower
+        if not result["preferred_date"]:
+            months = {
+                "january": 1, "jan": 1, "february": 2, "feb": 2, "march": 3, "mar": 3,
+                "april": 4, "apr": 4, "may": 5, "june": 6, "jun": 6, "july": 7, "jul": 7,
+                "august": 8, "aug": 8, "september": 9, "sep": 9, "october": 10, "oct": 10,
+                "november": 11, "nov": 11, "december": 12, "dec": 12
+            }
+
+            for month_name, month_num in months.items():
+                # Match patterns like "December 3", "December 3rd", "Dec 03", "december third"
+                # Ordinal patterns: 1st, 2nd, 3rd, 4th, 5th, etc.
+                pattern = rf'{month_name}\s+(\d{{1,2}})(?:st|nd|rd|th)?'
+                match = re.search(pattern, text_with_ordinals)
+                if match:
+                    day = int(match.group(1))
+                    year = now.year
+
+                    # If the date is in the past, assume next year
+                    try:
+                        target_date = datetime(year, month_num, day)
+                        if target_date.date() < now.date():
+                            target_date = datetime(year + 1, month_num, day)
+                        result["preferred_date"] = target_date.date().isoformat()
+                        print(f"[DateTimeExtractor] Found explicit date '{month_name} {day}': {result['preferred_date']}")
+                        break
+                    except ValueError:
+                        print(f"[DateTimeExtractor] Invalid date: {month_name} {day}")
+                        continue
+
+        # Check for specific day names (e.g., "monday", "next friday")
+        if not result["preferred_date"]:
             for day_name, day_num in days_of_week.items():
                 if day_name in text_lower:
                     # Determine if "next" is mentioned
@@ -732,8 +799,12 @@ class PreferenceExtractorTool(BaseModel):
         if any(word in text_lower for word in ["experienced", "senior", "expert", "professional"]):
             preferences.append("experienced")
 
-        # Openness
-        if any(word in text_lower for word in ["open", "anyone", "no preference", "any"]):
+        # Openness - use word boundaries to avoid false positives (e.g., "anywhere" contains "any")
+        openness_patterns = [
+            r"\bopen\b", r"\banyone\b", r"\bno preference\b",
+            r"\bany provider\b", r"\bany stylist\b", r"\bany barber\b"
+        ]
+        if any(re.search(pattern, text_lower) for pattern in openness_patterns):
             return "open to anyone"
 
         return " ".join(preferences) if preferences else None
@@ -749,6 +820,7 @@ class PreferenceExtractorTool(BaseModel):
         Returns "AMBIGUOUS:city_name" if location needs clarification.
         """
         text_lower = text.lower()
+        print(f"[_extract_location] Input text: '{text_lower}'")
 
         # Place-based keywords (landmarks, subway stations, etc.)
         # These return specific place + city for more accurate search
@@ -865,9 +937,20 @@ class PreferenceExtractorTool(BaseModel):
             return "New York, NY"  # Default to NYC for generic NY references
 
         # Check for "either" or "both" - user is flexible within current pilot cities
-        if any(phrase in text_lower for phrase in ["either", "both", "anywhere", "any area", "doesn't matter"]):
+        # BUT only trigger if there's actual location context, not just "anywhere" in a budget discussion
+        flexibility_phrases = ["either", "both", "any area", "doesn't matter"]
+        # "anywhere" needs to be followed by location context words to trigger
+        has_flexibility_signal = any(phrase in text_lower for phrase in flexibility_phrases)
+        has_anywhere_with_location_context = (
+            "anywhere" in text_lower and
+            any(ctx in text_lower for ctx in ["boston", "cambridge", "new york", "nyc", "city", "area", "location", "place"])
+        )
+
+        if has_flexibility_signal or has_anywhere_with_location_context:
+            print(f"[_extract_location] Returning 'Boston, MA/Cambridge, MA' (flexibility)")
             return "Boston, MA/Cambridge, MA"
 
+        print(f"[_extract_location] Returning None")
         return None
 
 
@@ -1180,6 +1263,18 @@ async def extract_location_with_llm(
     if not has_location_signal:
         return current_location  # Keep existing location
 
+    # Skip LLM call for obvious budget/time messages that don't have location
+    budget_keywords = ["$", "dollar", "budget", "spend", "cost", "price", "pay", "afford"]
+    is_budget_message = any(kw in text_lower for kw in budget_keywords)
+    has_explicit_location_word = any(loc in text_lower for loc in [
+        "boston", "cambridge", "new york", "nyc", "manhattan", "brooklyn",
+        "near", "around", "close to"
+    ])
+
+    # If it's a budget message without explicit location words, skip LLM
+    if is_budget_message and not has_explicit_location_word:
+        return current_location
+
     # Check for UK context to avoid confusion
     uk_context = any(kw in text_lower for kw in ["uk", "england", "british"])
 
@@ -1196,11 +1291,14 @@ CRITICAL RULES:
 5. If a location IS mentioned, append the correct state: ", MA" for Massachusetts or ", NY" for New York.
 6. If user says just "Cambridge" without state context, return "AMBIGUOUS:cambridge" (could be UK or MA).
 7. If location is outside our service area (e.g., "Los Angeles"), return "UNSUPPORTED:location_name".
+8. Budget-related messages like "anywhere between $20-$80" do NOT contain location info - return "NONE".
 
 Examples:
 - "I want a massage" → "NONE" (no location mentioned)
 - "before next friday" → "NONE" (no location mentioned)
 - "$50 budget" → "NONE" (no location mentioned)
+- "anywhere between 20 to 80 dollars" → "NONE" (this is about budget, not location)
+- "anywhere in boston" → "Boston, MA" (has explicit location)
 - "near MIT subway station" → "MIT station, Cambridge, MA"
 - "around Times Square" → "Times Square, New York, NY"
 - "in Boston" → "Boston, MA"

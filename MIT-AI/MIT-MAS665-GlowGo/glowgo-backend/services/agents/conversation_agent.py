@@ -115,6 +115,10 @@ class ConversationAgent:
                         last_assistant_message = msg.get("content", "")
                         break
 
+            print(f"\n[ConversationAgent] Step 0.5: Checking for time acceptance")
+            print(f"[ConversationAgent] Conversation history length: {len(conversation_history)}")
+            print(f"[ConversationAgent] Last assistant message (first 300 chars): {last_assistant_message[:300] if last_assistant_message else 'EMPTY'}")
+
             time_acceptance = detect_time_suggestion_acceptance(
                 user_message=user_message,
                 last_assistant_message=last_assistant_message
@@ -124,10 +128,49 @@ class ConversationAgent:
             time_just_accepted = False
             accepted_time_display = ""
 
+            # Track if last message already had a calendar suggestion (to avoid showing it twice)
+            last_message_had_time_suggestion = False
+            if last_assistant_message:
+                last_msg_lower = last_assistant_message.lower()
+                time_suggestion_indicators = [
+                    "how about", "around", ":00 am", ":00 pm", ":30 am", ":30 pm",
+                    "december", "january", "february", "march", "april", "may", "june",
+                    "july", "august", "september", "october", "november",
+                    "the day before", "day before on"
+                ]
+                last_message_had_time_suggestion = any(ind in last_msg_lower for ind in time_suggestion_indicators)
+                print(f"[ConversationAgent] Last message had time suggestion: {last_message_had_time_suggestion}")
+
+            # Check for IMPLICIT time acceptance: user provides other info without rejecting the time
+            # This happens when agent suggested a time and user moves to providing location/other info
+            if not time_acceptance.get("accepted") and last_message_had_time_suggestion:
+                user_lower = user_message.lower()
+                rejection_patterns = ["no", "different", "another time", "not that", "change", "other day", "other time"]
+                is_rejecting = any(pat in user_lower for pat in rejection_patterns)
+
+                if not is_rejecting:
+                    print(f"[ConversationAgent] Checking for implicit time acceptance...")
+                    # Extract time from last assistant message and treat as implicit acceptance
+                    time_acceptance = detect_time_suggestion_acceptance(
+                        user_message="yes",  # Treat as acceptance
+                        last_assistant_message=last_assistant_message
+                    )
+                    if time_acceptance.get("suggested_date") or time_acceptance.get("suggested_time"):
+                        print(f"[ConversationAgent] IMPLICIT time acceptance detected! User moved on without rejecting.")
+                        time_acceptance["accepted"] = True
+                        time_acceptance["implicit"] = True  # Mark as implicit so we don't over-acknowledge
+
             if time_acceptance.get("accepted"):
                 print(f"\n[ConversationAgent] User accepted time suggestion!")
                 print(f"[ConversationAgent] Accepted time: {time_acceptance}")
-                time_just_accepted = True
+
+                # ONLY set time_just_accepted if we actually extracted a date or time
+                # Otherwise the user said "yes" but there was nothing to accept
+                has_extracted_time = time_acceptance.get("suggested_date") or time_acceptance.get("suggested_time")
+                if has_extracted_time:
+                    time_just_accepted = True
+                else:
+                    print(f"[ConversationAgent] WARNING: User said 'yes' but no date/time was extracted from previous message!")
 
                 # Update current preferences with the accepted time
                 if time_acceptance.get("suggested_date"):
@@ -220,6 +263,16 @@ class ConversationAgent:
                 if preference_result.get("location") is not None
                 else current_preferences.get("location"),
             }
+
+            # CRITICAL: If time was just accepted, FORCE it into extracted_preferences
+            # This ensures the accepted time is saved regardless of what preference_extractor returned
+            if time_just_accepted:
+                if time_acceptance.get("suggested_date"):
+                    extracted_preferences["preferred_date"] = time_acceptance["suggested_date"]
+                    print(f"[ConversationAgent] FORCED preferred_date into extracted_preferences: {time_acceptance['suggested_date']}")
+                if time_acceptance.get("suggested_time"):
+                    extracted_preferences["preferred_time"] = time_acceptance["suggested_time"]
+                    print(f"[ConversationAgent] FORCED preferred_time into extracted_preferences: {time_acceptance['suggested_time']}")
 
             # Step 2.5: Use LLM for dynamic location extraction (supports any place in Boston/NYC)
             print(f"\n[ConversationAgent] Step 2.5: LLM-based location extraction")
@@ -399,9 +452,21 @@ CRITICAL INSTRUCTIONS:
                 })
 
                 # Smart calendar analysis when asking about time
+                # ONLY show calendar suggestion when:
+                # 1. time_info is the NEXT question to ask (budget is already filled)
+                # 2. We haven't already suggested a time in the last message
+                # 3. Time wasn't just implicitly accepted
                 smart_calendar_suggestion = ""
-                print(f"\n[ConversationAgent] Calendar check - time_info in missing: {'time_info' in missing_fields}, user_id: {user_id}, service_type: {extracted_preferences.get('service_type')}")
-                if "time_info" in missing_fields and user_id and extracted_preferences.get("service_type"):
+                has_budget = extracted_preferences.get("budget_min") or extracted_preferences.get("budget_max")
+                is_asking_about_time = missing_fields_adjusted and missing_fields_adjusted[0] == "time_info"
+
+                # Don't show calendar if we already suggested a time OR if time was just accepted
+                should_skip_calendar = last_message_had_time_suggestion or time_just_accepted or extracted_preferences.get("preferred_date")
+
+                print(f"\n[ConversationAgent] Calendar check - time_info in missing: {'time_info' in missing_fields}, is_asking_about_time: {is_asking_about_time}, has_budget: {has_budget}, user_id: {user_id}, service_type: {extracted_preferences.get('service_type')}")
+                print(f"[ConversationAgent] Should skip calendar: {should_skip_calendar} (last_had_suggestion={last_message_had_time_suggestion}, time_just_accepted={time_just_accepted}, has_preferred_date={bool(extracted_preferences.get('preferred_date'))})")
+
+                if is_asking_about_time and has_budget and user_id and extracted_preferences.get("service_type") and not should_skip_calendar:
                     print(f"[ConversationAgent] ✓ All conditions met! Analyzing calendar for smart time suggestions...")
                     try:
                         calendar_analysis = await analyze_calendar_for_smart_suggestions(
@@ -462,14 +527,26 @@ suggest booking the service the day before so the user looks their best for the 
                 # Special handling when time was just accepted
                 time_acceptance_section = ""
                 if time_just_accepted and accepted_time_display:
-                    time_acceptance_section = f"""
+                    # Check if it was implicit acceptance (user provided other info, not explicit "yes")
+                    is_implicit = time_acceptance.get("implicit", False)
+                    if is_implicit:
+                        # For implicit acceptance, just note the time was captured, don't over-acknowledge
+                        time_acceptance_section = f"""
+TIME CAPTURED:
+The previously suggested time ({accepted_time_display}) has been noted. The user moved on to providing other information.
+Just acknowledge the new information they provided (like location) and proceed naturally. Don't make a big deal about the time.
+Example: "Great, Davis Square works! Let me find some options for you..."
+"""
+                    else:
+                        # For explicit acceptance, acknowledge enthusiastically
+                        time_acceptance_section = f"""
 TIME JUST CONFIRMED:
 The user just confirmed the appointment time: {accepted_time_display}
 You MUST acknowledge this confirmation first with something like "Perfect! I've got you down for {accepted_time_display}!"
 Then ask the next question.
 """
 
-                prompt = f"""You are GlowGo, a friendly AI assistant helping users find beauty services in Boston, Cambridge (MA), and New York City.
+                prompt = f"""You are GlowGo, a friendly AI assistant helping users find beauty services.
 
 CURRENT DATE/TIME: {current_date} at {current_time}
 {calendar_context}
@@ -493,6 +570,7 @@ Generate a FRIENDLY response that:
 4. If there's an important event (wedding, interview, date, etc.), suggest: "I noticed you have [event] on [date]! Would you like to book your [service] for [day before] so you look amazing for it?"
 5. If no calendar insight and time is not set, just ask the time question naturally
 6. Be warm and conversational.
+7. IMPORTANT: If Location is "not specified", do NOT assume or mention any specific city (like NYC, Boston, etc.) in your response. Just confirm the other details without mentioning a location.
 
 Keep it concise but personalized."""
 

@@ -102,6 +102,16 @@ export default function PreferenceSummary({ preferences, readyToMatch }: Prefere
           </p>
         </div>
 
+        {/* Location */}
+        <div>
+          <p className="text-sm text-gray-500 mb-1">Where</p>
+          <p className="text-gray-900 font-medium">
+            {preferences.location || (
+              <span className="text-gray-400 italic">Not specified</span>
+            )}
+          </p>
+        </div>
+
         {/* Calendar Widget */}
         <div className="-mx-2">
            <CalendarWidget />
