@@ -155,34 +155,34 @@ export default function ChatInput({
   const isVoiceDisabled = disabled || isProcessingVoice
 
   return (
-    <div className="border-t border-blush-100 bg-gradient-to-b from-white to-blush-50/30 p-4 backdrop-blur-sm">
-      <div className="max-w-4xl mx-auto">
+    <div className="border-t border-slate-100 bg-gradient-to-b from-white to-slate-50/50 p-5 backdrop-blur-sm">
+      <div className="max-w-3xl mx-auto">
         {/* Audio Waveform Visualization */}
         {isRecording && (
-          <div className="mb-4">
+          <div className="mb-5">
             <AudioWaveform isActive={isRecording} />
           </div>
         )}
 
         {/* Recording/Processing Status */}
         {(isRecording || isProcessingVoice || isVoiceModeActive) && (
-          <div className="mb-3 text-center text-sm">
+          <div className="mb-4 text-center">
             {isVoiceModeActive && !isRecording && !isProcessingVoice && (
-              <span className="inline-flex items-center px-4 py-2 rounded-full bg-blush-50 text-blush-700 font-medium shadow-sm">
-                <span className="mr-2 h-2.5 w-2.5 rounded-full bg-blush-500 animate-pulse"></span>
-                Voice mode active - Click mic to exit
+              <span className="inline-flex items-center px-5 py-2.5 rounded-full bg-gradient-to-r from-pink-50 to-rose-50 text-rose-700 text-base font-semibold shadow-sm border border-pink-100">
+                <span className="mr-2.5 h-3 w-3 rounded-full bg-gradient-to-r from-rose-400 to-pink-500 animate-pulse shadow-lg shadow-pink-200"></span>
+                Voice mode active — Click mic to exit
               </span>
             )}
             {isRecording && (
-              <span className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-blush-100 to-blush-50 text-blush-700 font-medium shadow-sm">
-                <span className="mr-2 h-2.5 w-2.5 rounded-full bg-blush-600 animate-pulse"></span>
-                Listening... Click mic to stop or wait 1.2s silence
+              <span className="inline-flex items-center px-5 py-2.5 rounded-full bg-gradient-to-r from-rose-100 to-pink-100 text-rose-700 text-base font-semibold shadow-md border border-pink-200">
+                <span className="mr-2.5 h-3 w-3 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 animate-pulse shadow-lg shadow-pink-300"></span>
+                Listening... Pause to send
               </span>
             )}
             {isProcessingVoice && (
-              <span className="inline-flex items-center px-4 py-2 rounded-full bg-blush-50 text-blush-700 font-medium shadow-sm">
-                <span className="animate-spin mr-2 h-4 w-4 border-2 border-blush-500 border-t-transparent rounded-full"></span>
-                Processing your voice message...
+              <span className="inline-flex items-center px-5 py-2.5 rounded-full bg-gradient-to-r from-slate-50 to-pink-50 text-slate-700 text-base font-semibold shadow-sm border border-slate-200">
+                <span className="animate-spin mr-2.5 h-4 w-4 border-2 border-pink-500 border-t-transparent rounded-full"></span>
+                Processing your message...
               </span>
             )}
           </div>
@@ -190,9 +190,9 @@ export default function ChatInput({
 
         {/* Error Message */}
         {recordingError && (
-          <div className="mb-3 text-center">
-            <span className="inline-flex items-center px-4 py-2 rounded-full bg-red-50 text-red-600 text-sm font-medium shadow-sm">
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="mb-4 text-center">
+            <span className="inline-flex items-center px-5 py-2.5 rounded-full bg-red-50 text-red-600 text-base font-semibold shadow-sm border border-red-100">
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               {recordingError}
@@ -200,17 +200,17 @@ export default function ChatInput({
           </div>
         )}
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-4">
           {/* Voice button */}
           <button
             onClick={handleVoiceClick}
             disabled={isVoiceDisabled}
-            className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 ${
+            className={`flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${
               isRecording
-                ? 'bg-gradient-to-br from-blush-500 to-blush-600 text-white animate-pulse shadow-lg shadow-blush-500/30 scale-110'
+                ? 'bg-gradient-to-br from-rose-500 via-pink-500 to-fuchsia-500 text-white animate-pulse shadow-xl shadow-pink-300 scale-110'
                 : isVoiceModeActive
-                ? 'bg-gradient-to-br from-blush-500 to-blush-600 text-white shadow-md shadow-blush-500/20 hover:shadow-lg hover:shadow-blush-500/30 hover:scale-105'
-                : 'bg-white text-blush-600 border-2 border-blush-200 hover:border-blush-500 hover:bg-blush-50 shadow-sm hover:shadow-md'
+                ? 'bg-gradient-to-br from-rose-500 via-pink-500 to-fuchsia-500 text-white shadow-lg shadow-pink-200 hover:shadow-xl hover:shadow-pink-300 hover:scale-105'
+                : 'bg-white text-slate-600 border-2 border-slate-200 hover:border-pink-400 hover:text-pink-600 hover:bg-pink-50 shadow-sm hover:shadow-lg hover:scale-105'
             } disabled:opacity-50 disabled:cursor-not-allowed`}
             title={
               isVoiceModeActive
@@ -218,7 +218,7 @@ export default function ChatInput({
                 : 'Click to start voice mode'
             }
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           </button>
@@ -231,16 +231,16 @@ export default function ChatInput({
             onKeyDown={handleKeyDown}
             placeholder={isRecording ? "Recording..." : placeholder}
             disabled={disabled || isRecording || isProcessingVoice}
-            className="flex-1 h-12 px-5 rounded-full border-2 border-blush-100 bg-white focus:outline-none focus:ring-2 focus:ring-blush-500/20 focus:border-blush-500 disabled:bg-blush-50/50 disabled:cursor-not-allowed text-gray-900 placeholder-blush-300 shadow-sm transition-all"
+            className="flex-1 h-14 px-6 rounded-2xl border-2 border-slate-200 bg-white focus:outline-none focus:ring-4 focus:ring-pink-100 focus:border-pink-400 disabled:bg-slate-50 disabled:cursor-not-allowed text-slate-800 text-lg placeholder-slate-400 shadow-sm transition-all duration-300 font-medium"
           />
 
           {/* Send button */}
           <button
             onClick={handleSend}
             disabled={disabled || !input.trim() || isRecording || isProcessingVoice}
-            className="flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-blush-500 to-blush-600 text-white flex items-center justify-center hover:shadow-lg hover:shadow-blush-500/30 hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-md"
+            className="flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500 via-pink-500 to-fuchsia-500 text-white flex items-center justify-center hover:shadow-xl hover:shadow-pink-300 hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-lg shadow-pink-200"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </svg>
           </button>
@@ -249,6 +249,3 @@ export default function ChatInput({
     </div>
   )
 }
-
-
-

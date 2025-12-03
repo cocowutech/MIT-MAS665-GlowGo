@@ -95,10 +95,15 @@ export default function ChatPage() {
   // Show loading while checking auth
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-pink-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blush-500 mx-auto mb-4"></div>
-          <p className="text-gray-700">Loading...</p>
+          <div className="relative w-16 h-16 mx-auto mb-6">
+            <div className="absolute inset-0 bg-gradient-to-br from-rose-400 to-pink-500 rounded-2xl animate-pulse"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-2xl text-white">✦</span>
+            </div>
+          </div>
+          <p className="text-slate-500 font-medium text-lg">Loading your experience...</p>
         </div>
       </div>
     )
@@ -110,27 +115,35 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-pink-50/30 flex flex-col">
       <Header />
 
       {/* Main Chat Layout */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col bg-white">
+        <div className="flex-1 flex flex-col bg-white/80 backdrop-blur-sm">
           {/* Chat Header */}
-          <div className="border-b border-gray-200 p-4 bg-white">
-            <div className="max-w-4xl mx-auto">
-              <h1 className="text-2xl font-poppins font-bold text-gray-900">
-                Find Your Perfect Match ✨
-              </h1>
-              <p className="text-gray-700 text-sm mt-1">
-                Tell me what you&apos;re looking for and I&apos;ll help you find the best providers
-              </p>
+          <div className="border-b border-slate-100 px-6 py-6 bg-gradient-to-r from-white via-pink-50/40 to-white">
+            <div className="max-w-3xl mx-auto flex items-center gap-5">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-rose-300 to-pink-400 rounded-2xl rotate-3 opacity-50"></div>
+                <div className="relative w-14 h-14 bg-gradient-to-br from-rose-400 via-pink-500 to-fuchsia-500 rounded-2xl flex items-center justify-center shadow-xl shadow-pink-200">
+                  <span className="text-2xl text-white">✦</span>
+                </div>
+              </div>
+              <div>
+                <h1 className="text-3xl font-poppins font-bold text-slate-900 tracking-tight">
+                  Find Your Perfect Match
+                </h1>
+                <p className="text-slate-500 text-base mt-1 font-light">
+                  Tell me what you&apos;re looking for and I&apos;ll curate the best options
+                </p>
+              </div>
             </div>
           </div>
 
           {/* Microphone Permission Status */}
-          <div className="max-w-4xl mx-auto w-full px-4 pt-4">
+          <div className="max-w-3xl mx-auto w-full px-6 pt-5">
             <MicrophoneStatus
               permissionState={permissionState}
               onRequestPermission={requestPermission}
@@ -139,8 +152,8 @@ export default function ChatPage() {
 
           {/* Error Message */}
           {error && (
-            <div className="max-w-4xl mx-auto w-full px-4 pt-4">
-              <div className="bg-red-50 border border-red-200 rounded-button p-3 text-red-700 text-sm">
+            <div className="max-w-3xl mx-auto w-full px-6 pt-5">
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-red-700 text-base font-medium">
                 {error}
               </div>
             </div>
@@ -182,7 +195,7 @@ export default function ChatPage() {
         </div>
 
         {/* Preferences Sidebar (Desktop) */}
-        <div className="hidden md:block w-80">
+        <div className="hidden lg:block w-[420px] flex-shrink-0">
           <PreferenceSummary
             preferences={preferences}
             readyToMatch={readyToMatch}
@@ -191,7 +204,7 @@ export default function ChatPage() {
       </div>
 
       {/* Preferences Summary (Mobile - Bottom) */}
-      <div className="md:hidden border-t border-gray-200 bg-white p-4">
+      <div className="lg:hidden border-t border-slate-100 bg-white/90 backdrop-blur-sm p-5">
         <PreferenceSummary
           preferences={preferences}
           readyToMatch={readyToMatch}
